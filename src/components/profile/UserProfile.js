@@ -76,7 +76,8 @@ function UserProfile() {
         const response = await axios.get(`${BACKEND_URL}/profile/${id}`, {
           headers: {
             Authorization: `Bearer ${token}`
-          }
+          },
+          withCredentials: true
         });
         
         if (response.data && response.data.data) {
@@ -139,7 +140,8 @@ function UserProfile() {
       const response = await axios.put(`${BACKEND_URL}/profile/${id}/update`, profileForm, {
         headers: {
           Authorization: `Bearer ${token}`
-        }
+        },
+        withCredentials: true
       });
       
       if (response.data && response.data.data) {
@@ -174,7 +176,8 @@ function UserProfile() {
       }, {
         headers: {
           Authorization: `Bearer ${token}`
-        }
+        },
+        withCredentials: true
       });
       
       if (response.data) {

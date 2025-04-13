@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import api, { getApiUrl } from '../../utils/api2.js';
 
+axios.defaults.withCredentials = true;
+
 function DriverManagement({ user }) {
   const [drivers, setDrivers] = useState([]);
   const [buses, setBuses] = useState([]);
@@ -50,7 +52,9 @@ function DriverManagement({ user }) {
         //console.log('Fetching drivers from API...');
         const driversResponse = await axios.get(
           getApiUrl(api.endpoints.adminDrivers),
-          { headers: { Authorization: `Bearer ${user.token}` } }
+          {
+            headers: { Authorization: `Bearer ${user.token}` }
+          }
         );
 
         if (driversResponse.data) {

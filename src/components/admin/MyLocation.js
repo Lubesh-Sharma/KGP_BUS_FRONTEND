@@ -37,6 +37,7 @@ function MyLocation({ user }) {
           headers: {
             Authorization: `Bearer ${user.token}`,
           },
+          withCredentials: true
         }
       );
     } catch (err) {

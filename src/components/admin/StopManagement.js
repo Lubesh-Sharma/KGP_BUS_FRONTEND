@@ -5,6 +5,8 @@ import L from 'leaflet';
 import api, { getApiUrl } from '../../utils/api2.js';
 import '../../css/AdminStyles.css';
 
+axios.defaults.withCredentials = true;
+
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://unpkg.com/leaflet@1.7.1/dist/images/marker-icon-2x.png',
@@ -49,9 +51,13 @@ function StopManagement({ user }) {
       setLoading(true);
       setError('');
       
-      const response = await axios.get(getApiUrl(api.endpoints.adminStops), {
-        headers: { Authorization: `Bearer ${user.token}` }
-      });
+      const response = await axios.get(
+        getApiUrl(api.endpoints.adminStops),
+        {
+          headers: { Authorization: `Bearer ${user.token}` },
+          withCredentials: true
+        }
+      );
       
       if (response.data && Array.isArray(response.data)) {
         setStops(response.data);
@@ -180,7 +186,7 @@ function StopManagement({ user }) {
       const response = await axios.post(
         getApiUrl(api.endpoints.adminAddStop),
         formData,
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
       );
       
       if (response.data) {
@@ -209,7 +215,7 @@ function StopManagement({ user }) {
       const response = await axios.put(
         getApiUrl(api.endpoints.adminUpdateStop(editingStop.id)),
         formData,
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
       );
       
       if (response.data) {
@@ -239,7 +245,7 @@ function StopManagement({ user }) {
       try {
         await axios.delete(
           getApiUrl(api.endpoints.adminDeleteStop(id)),
-          { headers: { Authorization: `Bearer ${user.token}` } }
+          { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
         );
         
         //console.log("Stop deleted successfully");

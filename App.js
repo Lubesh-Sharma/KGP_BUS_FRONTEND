@@ -9,7 +9,7 @@ function Home() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    axios.get(`${API_BASE_URL}/`)
+    axios.get(`${API_BASE_URL}/`, { withCredentials: true })
       .then(res => setMessage(res.data.message))
       .catch(err => console.error("Error fetching data:", err));
   }, []);

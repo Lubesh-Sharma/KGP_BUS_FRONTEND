@@ -6,6 +6,9 @@ import { useNavigate } from 'react-router-dom';
 import { getApiUrl } from '../../utils/api2.js';
 import '../../css/DriverMapScreen.css';
 
+
+axios.defaults.withCredentials = true;
+
 // Fix for default marker icon in Leaflet with React
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({

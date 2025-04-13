@@ -55,7 +55,7 @@ const User = () => {
             await api.post('/bus_stops/updateLocation', {
                 latitude: userLocation[0],
                 longitude: userLocation[1]
-            });
+            }, { withCredentials: true });
             //console.log('User location updated in the database');
         } catch (error) {
             console.error('Error updating user location:', error);

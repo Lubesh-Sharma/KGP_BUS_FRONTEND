@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import api, { getApiUrl } from '../../utils/api2.js';
 
+axios.defaults.withCredentials = true;
+
 function BusManagement({ user }) {
   const [buses, setBuses] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -19,9 +21,10 @@ function BusManagement({ user }) {
       setLoading(true);
       setError('');
       
-      const response = await axios.get(getApiUrl(api.endpoints.adminBuses), {
+      const response = await get(getApiUrl(api.endpoints.adminBuses), {
         headers: { Authorization: `Bearer ${user.token}` },
-        timeout: 10000 // 10 second timeout
+        timeout: 10000, // 10 second timeout
+        withCredentials: true
       });
       
       if (response.data && Array.isArray(response.data)) {
@@ -74,7 +77,10 @@ function BusManagement({ user }) {
       const response = await axios.post(
         getApiUrl(api.endpoints.adminAddBus),
         formData,
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { 
+          headers: { Authorization: `Bearer ${user.token}` },
+          withCredentials: true 
+        }
       );
       
       if (response.data) {
@@ -106,7 +112,10 @@ function BusManagement({ user }) {
       const response = await axios.put(
         getApiUrl(api.endpoints.adminUpdateBus(editingBus.id)),
         formData,
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { 
+          headers: { Authorization: `Bearer ${user.token}` },
+          withCredentials: true 
+        }
       );
       
       if (response.data) {
@@ -137,7 +146,10 @@ function BusManagement({ user }) {
       
       await axios.delete(
         getApiUrl(api.endpoints.adminDeleteBus(id)),
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { 
+          headers: { Authorization: `Bearer ${user.token}` },
+          withCredentials: true 
+        }
       );
       
       //console.log("Bus deleted successfully");

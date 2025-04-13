@@ -8,6 +8,9 @@ import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
 import '../../css/RouteManagement.css'; // Import your CSS file for styling
 import api, { getApiUrl } from '../../utils/api2.js';
 
+// Ensure axios requests have withCredentials set globally
+axios.defaults.withCredentials = true;
+
 // Fix for default marker icon in Leaflet with React
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -241,7 +244,8 @@ function RouteManagement({ user }) {
                 try {
                     const busesResponse = await axios.get(getApiUrl(api.endpoints.adminBuses), {
                         headers: { Authorization: `Bearer ${user.token}` },
-                        timeout: 10000
+                        timeout: 10000,
+                        withCredentials: true
                     });
                     setBuses(busesResponse.data);
                     //console.log("Buses loaded for routes:", busesResponse.data.length);
@@ -255,7 +259,8 @@ function RouteManagement({ user }) {
                 try {
                     const stopsResponse = await axios.get(getApiUrl(api.endpoints.adminStops), {
                         headers: { Authorization: `Bearer ${user.token}` },
-                        timeout: 10000
+                        timeout: 10000,
+                        withCredentials: true
                     });
                     setStops(stopsResponse.data);
                     //console.log("Stops loaded for routes:", stopsResponse.data.length);
@@ -274,7 +279,8 @@ function RouteManagement({ user }) {
                 try {
                     const routesResponse = await axios.get(getApiUrl(api.endpoints.adminRoutes), {
                         headers: { Authorization: `Bearer ${user.token}` },
-                        timeout: 10000
+                        timeout: 10000,
+                        withCredentials: true
                     });
                     // Using the fetched routes data
                     const fetchedRoutes = routesResponse.data;
@@ -314,7 +320,7 @@ function RouteManagement({ user }) {
             try {
                 const stopsResponse = await axios.get(
                     getApiUrl(api.endpoints.adminStops),
-                    { headers: { Authorization: `Bearer ${user.token}` } }
+                    { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
                 );
                 
                 // Ensure stops are properly formatted with string IDs
@@ -335,7 +341,7 @@ function RouteManagement({ user }) {
                 // Fetch bus routes
                 const response = await axios.get(
                     getApiUrl(api.endpoints.adminRouteById(busId)),
-                    { headers: { Authorization: `Bearer ${user.token}` } }
+                    { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
                 );
 
                 // Ensure route data is properly formatted with string IDs
@@ -379,7 +385,7 @@ function RouteManagement({ user }) {
                     
                     const startTimesResponse = await axios.get(
                         startTimesUrl,
-                        { headers: { Authorization: `Bearer ${user.token}` } }
+                        { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
                     );
                     
                     //console.log("Start times response:", startTimesResponse.data);
@@ -448,7 +454,7 @@ function RouteManagement({ user }) {
             const response = await axios.post(
                 getApiUrl(api.endpoints.adminAddRoute),
                 newRoute,
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             if (response.data && response.data.id) {
@@ -486,7 +492,7 @@ function RouteManagement({ user }) {
             setMapLoading(true); // Start map loading for route update
             await axios.delete(
                 getApiUrl(api.endpoints.adminDeleteRoute(routeId)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             // Update local state
@@ -497,7 +503,7 @@ function RouteManagement({ user }) {
             setTimeout(async () => {
                 const response = await axios.get(
                     getApiUrl(api.endpoints.adminRouteById(selectedBus)),
-                    { headers: { Authorization: `Bearer ${user.token}` } }
+                    { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
                 );
                 const newStops = response.data;
                 setFormData({ bus_id: selectedBus, stops: newStops });
@@ -537,7 +543,7 @@ function RouteManagement({ user }) {
                 {
                     time_from_start: parseFloat(stopTimeData.time_from_start)
                 },
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             // Update local state
@@ -603,7 +609,7 @@ function RouteManagement({ user }) {
             
             const startTimesResponse = await axios.get(
                 currentStartTimesUrl,
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
             
             //console.log("Current start times response:", startTimesResponse.data);
@@ -629,7 +635,7 @@ function RouteManagement({ user }) {
                     start_time: newStartTime,
                     rep_no: newRepNo
                 },
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
             
             //console.log("Add start time response:", addResponse.data);
@@ -641,14 +647,14 @@ function RouteManagement({ user }) {
             await axios.put(
                 updateBusUrl,
                 { totalRep: newRepNo },
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             // Fetch updated start times
             //console.log("Fetching updated start times");
             const updatedStartTimesResponse = await axios.get(
                 getApiUrl(api.endpoints.adminBusStartTimes(selectedBus)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             //console.log("Updated start times:", updatedStartTimesResponse.data);
@@ -683,13 +689,13 @@ function RouteManagement({ user }) {
             
             await axios.delete(
                 getApiUrl(api.endpoints.adminDeleteStartTime(timeId)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
             
             // Fetch updated start times
             const startTimesResponse = await axios.get(
                 getApiUrl(api.endpoints.adminBusStartTimes(selectedBus)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
             
             if (startTimesResponse.data && startTimesResponse.data.data) {
@@ -707,7 +713,7 @@ function RouteManagement({ user }) {
                 await axios.put(
                     getApiUrl(api.endpoints.adminUpdateBusTotalRep(selectedBus)),
                     { totalRep: maxRepNo },
-                    { headers: { Authorization: `Bearer ${user.token}` } }
+                    { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
                 );
             }
         } catch (err) {
@@ -735,13 +741,13 @@ function RouteManagement({ user }) {
             await axios.put(
                 getApiUrl(api.endpoints.adminUpdateStartTime(editingTimeId)),
                 { start_time: newStartTime },
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             // Fetch updated start times
             const startTimesResponse = await axios.get(
                 getApiUrl(api.endpoints.adminBusStartTimes(selectedBus)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             if (startTimesResponse.data && startTimesResponse.data.data) {
@@ -791,9 +797,9 @@ function RouteManagement({ user }) {
         } else {
             // Calculate bounds for multiple stops
             const minLat = Math.min(...stopPositions.map(pos => pos[0]));
-            const maxLat = Math.max(...stopPositions.map(pos => pos[0]));
-            const minLng = Math.min(...stopPositions.map(pos => pos[1]));
-            const maxLng = Math.max(...stopPositions.map(pos => pos[1]));
+            const maxLat = Math.max(...stopPositions.map(pos[0]));
+            const minLng = Math.min(...stopPositions.map(pos[1]));
+            const maxLng = Math.max(...stopPositions.map(pos[1]));
 
             // Center the map on the middle of the route
             setMapCenter([
@@ -869,13 +875,13 @@ function RouteManagement({ user }) {
                     stop_order: parseInt(editFormData.stop_order),
                     time_from_start: parseFloat(editFormData.time_from_start)
                 },
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
 
             // Refresh routes after update
             const response = await axios.get(
                 getApiUrl(api.endpoints.adminRouteById(selectedBus)),
-                { headers: { Authorization: `Bearer ${user.token}` } }
+                { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
             );
             const busRoutes = response.data;
 

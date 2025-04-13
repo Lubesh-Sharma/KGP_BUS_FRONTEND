@@ -650,7 +650,8 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 headers: {
                     'Accept-Language': 'en-US,en;q=0.9',
                     'User-Agent': 'KGP_Bus_Application' // Identify your application to the API
-                }
+                },
+                withCredentials: true
             });
             
             // Check if any results were found

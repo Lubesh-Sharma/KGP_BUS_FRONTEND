@@ -18,11 +18,12 @@ function Header({ user, updateUser }) {
       
       if (token) {
         try {
-          await axios.post(`${BACKEND_URL}/logout`, {}, {
+            await axios.post(`${BACKEND_URL}/logout`, {}, {
             headers: {
               'Authorization': `Bearer ${token}`
-            }
-          });
+            },
+            withCredentials: true
+            });
         } catch (error) {
           // If token is expired or invalid, just log it - we'll still clear local storage
           //console.log('Logout API call failed, continuing with local logout');

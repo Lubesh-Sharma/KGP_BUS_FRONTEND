@@ -41,6 +41,7 @@ function UserManagement({ user }) {
               Authorization: `Bearer ${user.token}`,
               'Content-Type': 'application/json',
             },
+            withCredentials: true
           });
 
           if (response.data && Array.isArray(response.data)) {

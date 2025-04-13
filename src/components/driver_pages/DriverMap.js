@@ -33,8 +33,8 @@ const busStopIcon = new L.Icon({
 const LocationButton = ({ centerMap }) => {
   return (
     <div className="location-button-container">
-      <button 
-        className="location-button" 
+      <button
+        className="location-button"
         onClick={centerMap}
         title="Center map on your location"
       >
@@ -47,13 +47,13 @@ const LocationButton = ({ centerMap }) => {
 // Component to handle map centering
 const MapController = ({ center, zoom }) => {
   const map = useMap();
-  
+
   useEffect(() => {
     if (center) {
       map.setView(center, zoom || map.getZoom());
     }
   }, [center, zoom, map]);
-  
+
   return null;
 };
 
@@ -74,7 +74,8 @@ const LocationUpdater = ({ driverId, busId, position }) => {
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
-            }
+            },
+            withCredentials: true
           }
         );
         //console.log('Location updated successfully');
@@ -84,13 +85,13 @@ const LocationUpdater = ({ driverId, busId, position }) => {
     };
 
     updateLocation();
-    
+
     // Update location every 10 seconds
     const interval = setInterval(updateLocation, 10000);
-    
+
     return () => clearInterval(interval);
   }, [position, busId, driverId]);
-  
+
   return null;
 };
 
@@ -98,10 +99,10 @@ const LocationUpdater = ({ driverId, busId, position }) => {
 const OsrmRoute = ({ startPoint, endPoint, color = '#3388ff', weight = 5 }) => {
   const map = useMap();
   const routeRef = useRef(null);
-  
+
   useEffect(() => {
     if (!startPoint || !endPoint) return;
-    
+
     const fetchRoute = async () => {
       try {
         // Clear previous route
@@ -109,16 +110,16 @@ const OsrmRoute = ({ startPoint, endPoint, color = '#3388ff', weight = 5 }) => {
           map.removeLayer(routeRef.current);
           routeRef.current = null;
         }
-        
+
         const response = await axios.get(
           `https://router.project-osrm.org/route/v1/driving/${startPoint[1]},${startPoint[0]};${endPoint[1]},${endPoint[0]}?overview=full&geometries=geojson`
         );
-        
+
         if (response.data.code === 'Ok' && response.data.routes.length > 0) {
           const routeGeometry = response.data.routes[0].geometry.coordinates;
           // OSRM returns coordinates as [lng, lat], we need to flip for Leaflet
           const coordinates = routeGeometry.map(coord => [coord[1], coord[0]]);
-          
+
           // Create a polyline and add to map
           const polyline = L.polyline(coordinates, {
             color: color,
@@ -126,23 +127,23 @@ const OsrmRoute = ({ startPoint, endPoint, color = '#3388ff', weight = 5 }) => {
             opacity: 0.7,
             lineJoin: 'round'
           }).addTo(map);
-          
+
           routeRef.current = polyline;
         }
       } catch (error) {
         console.error('Error fetching route:', error);
       }
     };
-    
+
     fetchRoute();
-    
+
     return () => {
       if (routeRef.current) {
         map.removeLayer(routeRef.current);
       }
     };
   }, [map, startPoint, endPoint, color, weight]);
-  
+
   return null;
 };
 
@@ -157,16 +158,16 @@ const DriverLocationTracker = ({ setPosition }) => {
       alert('Could not get your location. Please enable location services.');
     }
   });
-  
+
   useEffect(() => {
     // Start tracking location when component mounts
     map.locate({ watch: true, enableHighAccuracy: true });
-    
+
     return () => {
       map.stopLocate();
     };
   }, [map]);
-  
+
   return null;
 };
 
@@ -180,7 +181,7 @@ function DriverMap({ user }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const mapRef = useRef(null);
-  
+
   // Fetch driver's assigned bus on component mount
   useEffect(() => {
     const fetchDriverBus = async () => {
@@ -191,10 +192,11 @@ function DriverMap({ user }) {
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
-            }
+            },
+            withCredentials: true
           }
         );
-        
+
         if (response.data) {
           setDriverBus(response.data);
           //console.log('Driver bus:', response.data);
@@ -206,14 +208,14 @@ function DriverMap({ user }) {
         setLoading(false);
       }
     };
-    
+
     fetchDriverBus();
   }, [user]);
-  
+
   // Fetch bus route when driver bus is available
   useEffect(() => {
     if (!driverBus || !driverBus.id) return;
-    
+
     const fetchBusRoute = async () => {
       try {
         setLoading(true);
@@ -222,10 +224,11 @@ function DriverMap({ user }) {
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
-            }
+            },
+            withCredentials: true
           }
         );
-        
+
         if (response.data && response.data.data && response.data.data.stops) {
           setBusRoute(response.data.data.stops);
           //console.log('Bus route:', response.data.data.stops);
@@ -237,17 +240,17 @@ function DriverMap({ user }) {
         setLoading(false);
       }
     };
-    
+
     fetchBusRoute();
   }, [driverBus]);
-  
+
   // Center map on driver's location when available
   useEffect(() => {
     if (position) {
       setMapCenter(position);
     }
   }, [position]);
-  
+
   // Handle "Your Location" button click
   const centerMap = useCallback(() => {
     if (position) {
@@ -259,33 +262,33 @@ function DriverMap({ user }) {
       }
     }
   }, [position]);
-  
+
   // Determine current route segment based on stops_cleared
   const getCurrentRouteSegment = useCallback(() => {
     if (!busRoute.length || !driverBus) return null;
-    
+
     const stopsCleared = driverBus.stops_cleared || 0;
     // Find the stop with order matching stops_cleared
     const currentStop = busRoute.find(stop => stop.stop_order === stopsCleared);
     // Next stop is the one after current (or first if we're at the end)
     const nextStop = busRoute.find(stop => stop.stop_order === stopsCleared + 1) || busRoute[0];
-    
+
     if (currentStop && nextStop) {
       return {
         start: [parseFloat(currentStop.latitude), parseFloat(currentStop.longitude)],
         end: [parseFloat(nextStop.latitude), parseFloat(nextStop.longitude)]
       };
     }
-    
+
     return null;
   }, [busRoute, driverBus]);
-  
+
   const currentSegment = getCurrentRouteSegment();
-  
+
   // Mark next stop as cleared
   const markStopCleared = async (stopOrder) => {
     if (!driverBus || !driverBus.id) return;
-    
+
     try {
       await axios.post(
         getApiUrl('/driver/clear-stop'),
@@ -295,32 +298,33 @@ function DriverMap({ user }) {
         },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
-          }
+        Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
+          },
+          withCredentials: true
         }
       );
-      
+
       // Update local state
       setDriverBus(prev => ({
         ...prev,
         stops_cleared: stopOrder
       }));
-      
+
       //console.log('Stop cleared:', stopOrder);
     } catch (error) {
       console.error('Error clearing stop:', error);
       alert('Failed to mark stop as cleared. Please try again.');
     }
   };
-  
+
   if (loading && !driverBus) {
     return <div className="loading">Loading driver information...</div>;
   }
-  
+
   if (error) {
     return <div className="error">{error}</div>;
   }
-  
+
   return (
     <div className="driver-map-container">
       {driverBus && (
@@ -329,7 +333,7 @@ function DriverMap({ user }) {
           <p>Stops cleared: {driverBus.stops_cleared || 0} / {busRoute.length}</p>
         </div>
       )}
-      
+
       <MapContainer
         center={mapCenter}
         zoom={zoom}
@@ -341,10 +345,10 @@ function DriverMap({ user }) {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        
+
         <MapController center={mapCenter} zoom={zoom} />
         <DriverLocationTracker setPosition={setPosition} />
-        
+
         {position && (
           <Marker position={position} icon={busIcon}>
             <Popup>
@@ -355,7 +359,7 @@ function DriverMap({ user }) {
             </Popup>
           </Marker>
         )}
-        
+
         {/* Display all bus stops in the route */}
         {busRoute.map(stop => (
           <Marker
@@ -368,7 +372,7 @@ function DriverMap({ user }) {
                 <strong>{stop.name}</strong>
                 <p>Stop #{stop.stop_order}</p>
                 {driverBus && driverBus.stops_cleared < stop.stop_order && (
-                  <button 
+                  <button
                     onClick={() => markStopCleared(stop.stop_order)}
                     className="clear-stop-button"
                   >
@@ -379,12 +383,12 @@ function DriverMap({ user }) {
             </Popup>
           </Marker>
         ))}
-        
+
         {/* Show complete route between all stops */}
         {busRoute.length > 1 && busRoute.map((stop, index) => {
           const nextIndex = (index + 1) % busRoute.length;
           const nextStop = busRoute[nextIndex];
-          
+
           return (
             <OsrmRoute
               key={`route-${stop.id}-${nextStop.id}`}
@@ -395,7 +399,7 @@ function DriverMap({ user }) {
             />
           );
         })}
-        
+
         {/* Highlight current segment with a thicker, brighter line */}
         {currentSegment && (
           <OsrmRoute
@@ -405,17 +409,17 @@ function DriverMap({ user }) {
             weight={6}
           />
         )}
-        
+
         {/* Location update handler */}
         {position && driverBus && (
-          <LocationUpdater 
+          <LocationUpdater
             driverId={user.id}
             busId={driverBus.id}
             position={position}
           />
         )}
       </MapContainer>
-      
+
       <LocationButton centerMap={centerMap} />
     </div>
   );

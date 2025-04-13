@@ -47,7 +47,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
         const response = await axios.get(`${BACKEND_URL}/authenticate`, {
           headers: {
             'Authorization': `Bearer ${token}`
-          }
+          },
+          withCredentials: true
         });
 
         if (response.status === 200) {
@@ -115,7 +116,8 @@ function App() {
           const response = await axios.get(`${BACKEND_URL}/authenticate`, {
             headers: {
               'Authorization': `Bearer ${token}`
-            }
+            },
+            withCredentials: true
           });
           if (response.status === 200) {
             setUser(response.data.user);

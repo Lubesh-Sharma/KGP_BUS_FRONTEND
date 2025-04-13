@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+axios.defaults.withCredentials = true;
+
 // Base URL based on environment
 const API_BASE_URL = process.env.REACT_APP_API_URL;
 // Define API endpoints
@@ -70,6 +72,7 @@ export const callApi = async (endpoint, options = {}) => {
       url,
       ...options,
       timeout: options.timeout || 15000, // Default timeout of 15 seconds
+      withCredentials: true, // Ensure credentials are included
     });
     return response.data;
   } catch (error) {

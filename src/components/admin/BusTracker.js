@@ -33,7 +33,8 @@ function BusTracker({ user }) {
     const fetchRoutes = async () => {
       try {
         const response = await axios.get(getApiUrl(api.endpoints.allRoutes), {
-          headers: { Authorization: `Bearer ${user.token}` }
+          headers: { Authorization: `Bearer ${user.token}` },
+          withCredentials: true
         });
         
         if (response.data && Array.isArray(response.data)) {
@@ -62,7 +63,8 @@ function BusTracker({ user }) {
       setError('');
       
       const response = await axios.get(getApiUrl(api.endpoints.busLocations), {
-        headers: { Authorization: `Bearer ${user.token}` }
+        headers: { Authorization: `Bearer ${user.token}` },
+        withCredentials: true
       });
       
       if (response.data && Array.isArray(response.data)) {

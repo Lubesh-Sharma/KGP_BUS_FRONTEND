@@ -66,7 +66,7 @@ function UserLocations({ user }) {
       
       const response = await axios.get(
         getApiUrl(api.endpoints.adminUserLocations),
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
       );
       
       if (response.data && Array.isArray(response.data)) {
