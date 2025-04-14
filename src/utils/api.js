@@ -4,7 +4,7 @@ const BACKEND_URL = process.env.REACT_APP_API_URL;
 // Create an Axios instance with default config
 const api = axios.create({
   baseURL: BACKEND_URL,
-  withCredentials: true,
+  withCredentials: true, // Ensure cookies are sent with requests
   headers: {
     'Content-Type': 'application/json'
   }

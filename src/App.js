@@ -18,6 +18,8 @@ import UserProfile from './components/profile/UserProfile';
 import axios from 'axios';
 
 const BACKEND_URL = process.env.REACT_APP_API_URL;
+axios.defaults.withCredentials = true;
+
 
 // Future flags configuration for React Router
 const router = {
