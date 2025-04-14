@@ -950,9 +950,9 @@ function RouteManagement({ user }) {
                     {loading ? 'Refreshing...' : 'Refresh Data'}
                 </button>
 
-                <button onClick={() => setShowMapDebug(!showMapDebug)}>
+                {/* <button onClick={() => setShowMapDebug(!showMapDebug)}>
                     {showMapDebug ? "Hide Debug Info" : "Show Debug Info"}
-                </button>
+                </button> */}
             </div>
 
             {showMapDebug && (

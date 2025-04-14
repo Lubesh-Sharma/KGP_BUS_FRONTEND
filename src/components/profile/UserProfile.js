@@ -171,7 +171,6 @@ function UserProfile() {
       const token = localStorage.getItem('jwtToken');
       
       const response = await axios.post(`${BACKEND_URL}/profile/${id}/change-password`, {
-        currentPassword: passwordForm.currentPassword,
         newPassword: passwordForm.newPassword
       }, {
         headers: {
@@ -183,7 +182,6 @@ function UserProfile() {
       if (response.data) {
         setSuccess('Password changed successfully');
         setPasswordForm({
-          currentPassword: '',
           newPassword: '',
           confirmPassword: ''
         });
@@ -329,17 +327,6 @@ function UserProfile() {
               </Card.Header>
               <Card.Body>
                 <Form onSubmit={handlePasswordSubmit}>
-                  <Form.Group className="mb-3">
-                    <Form.Label>Current Password</Form.Label>
-                    <Form.Control
-                      type="password"
-                      name="currentPassword"
-                      value={passwordForm.currentPassword}
-                      onChange={handlePasswordChange}
-                      required
-                    />
-                  </Form.Group>
-                  
                   <Form.Group className="mb-3">
                     <Form.Label>New Password</Form.Label>
                     <Form.Control

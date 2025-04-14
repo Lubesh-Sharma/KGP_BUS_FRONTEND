@@ -90,13 +90,30 @@ function DriverManagement({ user }) {
     });
   };
 
+  const getBusAssignments = () => {
+    const busAssignments = {};
+    drivers.forEach(driver => {
+      if (driver.bus_id && (!editingDriver || driver.id !== editingDriver.id)) {
+        busAssignments[driver.bus_id] = driver.username;
+      }
+    });
+    return busAssignments;
+  };
+
   // Handle adding a new driver
   const handleAddDriver = async (e) => {
     e.preventDefault();
     try {
+      // Client-side validation - check if bus is already assigned
+      const busAssignments = getBusAssignments();
+      if (formData.bus_id && busAssignments[formData.bus_id]) {
+        alert(`This bus is already assigned to driver: ${busAssignments[formData.bus_id]}`);
+        return;
+      }
+
       setLoading(true);
       setError('');
-      
+
       const response = await axios.post(
         getApiUrl(api.endpoints.adminAddDriver),
         formData,
@@ -104,32 +121,37 @@ function DriverManagement({ user }) {
       );
 
       //console.log('Driver added successfully:', response.data);
-
-      // Reset form and refresh data
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        bus_id: ''
-      });
+      setFormData({ name: '', email: '', password: '', bus_id: '' });
       setIsAddingNew(false);
       setRefreshTrigger(prev => prev + 1);
-
     } catch (err) {
       console.error('Error adding driver:', err);
-      setError(`Failed to add driver: ${err.response?.data?.message || err.message}`);
+      if (err.response?.status === 400 &&
+        err.response?.data?.message?.includes('already assigned')) {
+        alert(err.response.data.message);
+      } else {
+        setError(`Failed to add driver: ${err.response?.data?.message || err.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
 
+
   // Handle updating a driver
   const handleUpdateDriver = async (e) => {
     e.preventDefault();
     try {
+      // Client-side validation - check if bus is already assigned
+      const busAssignments = getBusAssignments();
+      if (formData.bus_id && busAssignments[formData.bus_id]) {
+        alert(`This bus is already assigned to driver: ${busAssignments[formData.bus_id]}`);
+        return;
+      }
+
       setLoading(true);
       setError('');
-      
+
       const response = await axios.put(
         getApiUrl(api.endpoints.adminUpdateDriver(editingDriver.id)),
         formData,
@@ -137,24 +159,22 @@ function DriverManagement({ user }) {
       );
 
       //console.log('Driver updated successfully:', response.data);
-
-      // Reset form and refresh data
-      setFormData({
-        name: '',
-        email: '',
-        password: '',
-        bus_id: ''
-      }); 
+      setFormData({ name: '', email: '', password: '', bus_id: '' });
       setEditingDriver(null);
       setRefreshTrigger(prev => prev + 1);
-
     } catch (err) {
       console.error('Error updating driver:', err);
-      setError(`Failed to update driver: ${err.response?.data?.message || err.message}`);
+      if (err.response?.status === 400 &&
+        err.response?.data?.message?.includes('already assigned')) {
+        alert(err.response.data.message);
+      } else {
+        setError(`Failed to update driver: ${err.response?.data?.message || err.message}`);
+      }
     } finally {
       setLoading(false);
     }
   };
+
 
   // Handle deleting a driver
   const handleDeleteDriver = async (driverId) => {
@@ -284,19 +304,29 @@ function DriverManagement({ user }) {
               <select
                 id="bus_id"
                 name="bus_id"
-                value={formData.bus_id}
+                value={formData.bus_id || ''}
                 onChange={handleChange}
+                className="form-control"
                 disabled={loading}
               >
                 <option value="">-- No Bus Assigned --</option>
-                {buses.map(bus => (
-                  <option key={bus.id} value={bus.id}>
-                    {bus.name}
-                  </option>
-                ))}
+                {buses.map(bus => {
+                  const busAssignments = getBusAssignments();
+                  const isAssigned = Boolean(busAssignments[bus.id]);
+
+                  return (
+                    <option
+                      key={bus.id}
+                      value={bus.id}
+                      disabled={isAssigned}
+                    >
+                      {bus.name} {isAssigned ? `(Assigned to ${busAssignments[bus.id]})` : ''}
+                    </option>
+                  );
+                })}
               </select>
             </div>
-            
+
             <div className="form-buttons">
               <button type="submit" disabled={loading}>
                 {loading ? 'Saving...' : editingDriver ? 'Update Driver' : 'Add Driver'}
