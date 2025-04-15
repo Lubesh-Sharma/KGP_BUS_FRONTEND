@@ -5,6 +5,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { getApiUrl } from '../../utils/api2.js';
 import '../../css/DriverMapScreen.css';
+import TripInitModal from './TripInitModal';
 
 axios.defaults.withCredentials = true;
 
@@ -95,7 +96,6 @@ function configureRoutingMachine() {
 const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopIndex }) => {
   const map = useMap();
   const routeRef = useRef(null);
-  // eslint-disable-next-line no-unused-vars
   const nextSegmentRef = useRef(null);
   const [isLoading, setIsLoading] = useState(false);
   const routingControlsRef = useRef([]);
@@ -105,8 +105,8 @@ const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopInde
     if (routingControlsRef.current.length > 0) {
       routingControlsRef.current.forEach(control => {
         try {
-          if (map && map.hasLayer(control)) {
-            map.removeControl(control);
+          if (map && control && map.hasLayer(control)) {
+            control.remove();
           }
         } catch (e) {
           console.warn("Error removing routing control:", e);
@@ -116,13 +116,16 @@ const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopInde
     }
   }, [map]);
 
+  // Cleanup on unmount
   useEffect(() => {
-    configureRoutingMachine();
-
     return () => {
       clearAllRoutingControls();
     };
   }, [clearAllRoutingControls]);
+
+  useEffect(() => {
+    configureRoutingMachine();
+  }, []);
 
   useEffect(() => {
     if (!stops || stops.length < 2 || !map) return;
@@ -135,10 +138,17 @@ const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopInde
       try {
         setIsLoading(true);
 
+        // Clear previously drawn routes before adding new ones
         clearAllRoutingControls();
 
         if (routeRef.current) {
-          map.removeLayer(routeRef.current);
+          try {
+            if (map.hasLayer(routeRef.current)) {
+              map.removeLayer(routeRef.current);
+            }
+          } catch (err) {
+            console.warn("Protected from removeLayer error:", err);
+          }
           routeRef.current = null;
         }
 
@@ -153,50 +163,55 @@ const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopInde
           return;
         }
 
-        const routingControl = L.Routing.control({
-          waypoints: waypoints.map(coords => L.latLng(coords[0], coords[1])),
-          routeWhileDragging: false,
-          showAlternatives: false,
-          addWaypoints: false,
-          fitSelectedRoutes: false,
-          show: false,
-          lineOptions: {
-            styles: [{ color: '#3388ff', opacity: 0.7, weight: 4 }],
-            extendToWaypoints: true,
-            missingRouteTolerance: 10
-          },
-          createMarker: () => null,
-          serviceUrl: 'https://router.project-osrm.org/route/v1'
-        });
+        try {
+          const routingControl = L.Routing.control({
+            waypoints: waypoints.map(coords => L.latLng(coords[0], coords[1])),
+            routeWhileDragging: false,
+            showAlternatives: false,
+            addWaypoints: false,
+            fitSelectedRoutes: false,
+            show: false,
+            lineOptions: {
+              styles: [{ color: '#3388ff', opacity: 0.7, weight: 4 }],
+              extendToWaypoints: true,
+              missingRouteTolerance: 10
+            },
+            createMarker: () => null,
+            serviceUrl: 'https://router.project-osrm.org/route/v1'
+          });
 
-        if (window.L.Routing._routingControls) {
-          window.L.Routing._routingControls.push(routingControl);
-        }
-
-        routingControlsRef.current.push(routingControl);
-
-        routingControl.on('routesfound', (e) => {
-          if (e.routes && e.routes.length > 0) {
-            setIsLoading(false);
+          if (window.L.Routing._routingControls) {
+            window.L.Routing._routingControls.push(routingControl);
           }
-        });
 
-        routingControl.on('routingerror', (e) => {
-          console.warn("Routing error occurred:", e);
-          setIsLoading(false);
-        });
+          routingControlsRef.current.push(routingControl);
 
-        setTimeout(() => {
-          if (map && routingControl) {
-            try {
-              routingControl.addTo(map);
-              isInitialRenderRef.current = false;
-            } catch (err) {
-              console.error("Error adding routing control to map:", err);
+          routingControl.on('routesfound', (e) => {
+            if (e.routes && e.routes.length > 0) {
               setIsLoading(false);
             }
-          }
-        }, 100);
+          });
+
+          routingControl.on('routingerror', (e) => {
+            console.warn("Routing error occurred:", e);
+            setIsLoading(false);
+          });
+
+          setTimeout(() => {
+            if (map && routingControl) {
+              try {
+                routingControl.addTo(map);
+                isInitialRenderRef.current = false;
+              } catch (err) {
+                console.error("Error adding routing control to map:", err);
+                setIsLoading(false);
+              }
+            }
+          }, 100);
+        } catch (err) {
+          console.error("Error creating routing control:", err);
+          setIsLoading(false);
+        }
       } catch (error) {
         console.error('Error setting up full route:', error);
         setIsLoading(false);
@@ -510,6 +525,8 @@ function DriverMapScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [userZoomed, setUserZoomed] = useState(false); // Track if user manually zoomed
+  const [showTripInitModal, setShowTripInitModal] = useState(false);
+  const [initModalShown, setInitModalShown] = useState(false);
   const navigate = useNavigate();
 
   const mapRef = useRef(null);
@@ -548,6 +565,12 @@ function DriverMapScreen() {
 
         if (response.data && response.data.data) {
           setBusInfo(response.data.data);
+          
+          // Only show the modal on first login, not on page refreshes
+          if (!initModalShown) {
+            setShowTripInitModal(true);
+            setInitModalShown(true);
+          }
         } else {
           setError('No bus assigned to you');
         }
@@ -564,7 +587,7 @@ function DriverMapScreen() {
     const interval = setInterval(fetchDriverBus, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [initModalShown]);
 
   useEffect(() => {
     if (position && !center) {
@@ -615,6 +638,18 @@ function DriverMapScreen() {
     } catch (error) {
       console.error('Error auto-clearing stop:', error);
     }
+  };
+
+  const handleTripInitialized = (updatedBusInfo) => {
+    // Update the bus info with the data returned from trip initialization
+    setBusInfo(prevInfo => ({
+      ...prevInfo,
+      ...updatedBusInfo
+    }));
+  };
+
+  const handleCloseTripModal = () => {
+    setShowTripInitModal(false);
   };
 
   const getStopIndices = () => {
@@ -678,6 +713,14 @@ function DriverMapScreen() {
 
   return (
     <div className="driver-map-screen">
+      {/* Trip Initialization Modal */}
+      <TripInitModal 
+        show={showTripInitModal} 
+        onClose={handleCloseTripModal}
+        busInfo={busInfo}
+        onTripInit={handleTripInitialized}
+      />
+
       <div className="driver-map-container">
         <MapContainer
           center={center || [22.3190, 87.3091]}
@@ -798,6 +841,13 @@ function DriverMapScreen() {
               <p><strong>Distance:</strong> <span id="next-stop-distance">Calculating...</span></p>
             </div>
           )}
+          {/* Trip reinitialization button */}
+          <button 
+            className="trip-init-button"
+            onClick={() => setShowTripInitModal(true)}
+          >
+            Change Trip
+          </button>
         </div>
       </div>
     </div>
