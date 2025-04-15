@@ -100,21 +100,24 @@ function UserLocations({ user }) {
     }
   };
   
-  // Initial fetch
+  // Initial fetch and polling interval
   useEffect(() => {
-    fetchUserLocations();
-    
-    // Set up refresh interval - refresh every 30 seconds
-    const interval = setInterval(fetchUserLocations, 30000);
-    
-    // Clean up interval on unmount
-    return () => {
-      if (interval) {
-        clearInterval(interval);
-      }
+    let intervalId;
+
+    const fetchLocations = async () => {
+      await fetchUserLocations();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user.token]); 
+
+    fetchLocations(); // Initial fetch
+
+    intervalId = setInterval(() => {
+      fetchLocations();
+    }, 5000); // 5 seconds
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [user.token]);
   
   // Filter locations based on search text - ensure we check all possible fields
   const filteredLocations = locations.filter(location => {

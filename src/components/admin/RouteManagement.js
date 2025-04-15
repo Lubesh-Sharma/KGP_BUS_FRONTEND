@@ -840,7 +840,7 @@ function RouteManagement({ user }) {
     const getStopIcon = () => {
         // Use custom bus stop icon
         return new L.Icon({
-            iconUrl: '/bus-stop.png',
+            iconUrl: '/images/bus-stop.png',
             iconSize: [24, 24],
             iconAnchor: [12, 24],
             popupAnchor: [0, -24]
@@ -993,22 +993,22 @@ function RouteManagement({ user }) {
 
         // If a bus is selected, start fetching its location
         if (selectedBus) {
-            console.log(`Setting up location polling for bus ID: ${selectedBus}`);
+            //console.log(`Setting up location polling for bus ID: ${selectedBus}`);
             
             // Fetch location immediately
             fetchBusLocation(selectedBus);
             
-            // Set up interval to refresh location every 10 seconds
+            // Set up interval to refresh location every 5 seconds
             const intervalId = setInterval(() => {
-                console.log(`Polling location for bus ID: ${selectedBus}`);
+                //console.log(`Polling location for bus ID: ${selectedBus}`);
                 fetchBusLocation(selectedBus);
-            }, 10000);
+            }, 5000); // 5 seconds
             
             setLocationRefreshInterval(intervalId);
             
             // Clean up interval on unmount or when bus changes
             return () => {
-                console.log('Cleaning up location interval');
+                //console.log('Cleaning up location interval');
                 clearInterval(intervalId);
             };
         } else {

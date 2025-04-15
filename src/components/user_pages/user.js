@@ -62,24 +62,30 @@ const User = () => {
         }
     }, [userLocation]);
 
-    // Get user's location
+    // Get user's location and update state live for pin movement (high accuracy)
     useEffect(() => {
+        let geoWatchId;
         if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(
+            geoWatchId = navigator.geolocation.watchPosition(
                 (position) => {
                     const { latitude, longitude } = position.coords;
                     setUserLocation([latitude, longitude]);
                 },
                 (err) => {
                     console.error("Geolocation error:", err.message);
-                    // Fall back to default location
                     setUserLocation([22.3149, 87.3104]);
-                }
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
             );
         }
+        return () => {
+            if (geoWatchId && navigator.geolocation) {
+                navigator.geolocation.clearWatch(geoWatchId);
+            }
+        };
     }, []);
 
-    // Update user location in the database every 10 minutes
+    // Update user location in the database every 10 minutes (was 5 seconds)
     useEffect(() => {
         // Only proceed if user is authenticated and location is available
         if (!localStorage.getItem('jwtToken') || !userLocation) return;

@@ -25,7 +25,7 @@ const userIcon = new L.Icon({
 
 // Bus stop icon
 const busStopIcon = new L.Icon({
-  iconUrl: '/bus-stop.png', // File in public folder
+  iconUrl: '/images/bus-stop.png', // File in public folder
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   popupAnchor: [0, -24]
@@ -542,6 +542,28 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
     }
   }, [userLocation, trackedStopId, busStops]);
 
+  // Add this effect to update user location every second for live pin movement (high accuracy)
+  useEffect(() => {
+    let geoWatchId;
+    if (navigator.geolocation && typeof setUserLocation === 'function') {
+        geoWatchId = navigator.geolocation.watchPosition(
+            (position) => {
+                const { latitude, longitude } = position.coords;
+                setUserLocation([latitude, longitude]);
+            },
+            (err) => {
+                console.error("Error watching position:", err.message);
+            },
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+        );
+    }
+    return () => {
+        if (geoWatchId && navigator.geolocation) {
+            navigator.geolocation.clearWatch(geoWatchId);
+        }
+    };
+  }, [setUserLocation]);
+
   // Fetch list of buses on mount
   useEffect(() => {
     const loadBuses = async () => {
@@ -723,7 +745,7 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
         setBusStops(updatedStops);
       }
 
-      // Set up the interval to refresh data if it doesn't exist already
+      // Set up the interval to refresh bus location every 5 seconds
       if (busInService && !intervalRef.current) {
         intervalRef.current = setInterval(() => {
           if (routesDrawn) {
@@ -733,7 +755,7 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
             // Otherwise do a full refresh but don't re-render the UI
             fetchBusData(busId, false, true);
           }
-        }, 10000); // Refresh every 10 seconds
+        }, 5000); // 5 seconds
       }
 
       if (showLoading && !refreshDataOnly) {

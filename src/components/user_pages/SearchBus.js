@@ -17,7 +17,7 @@ const busIcon = new L.Icon({
 });
 
 const busStopIcon = new L.Icon({
-  iconUrl: '/bus-stop.png',
+  iconUrl: '/images/bus-stop.png',
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   popupAnchor: [0, -24]

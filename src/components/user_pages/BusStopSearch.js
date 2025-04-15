@@ -9,7 +9,7 @@ import '../../css/user.css';
 
 // Bus stop icon
 const busStopIcon = new L.Icon({
-    iconUrl: '/bus-stop.png', // Make sure this file exists in public folder
+    iconUrl: '/images/bus-stop.png', // Make sure this file exists in public folder
     iconSize: [24, 24],
     iconAnchor: [12, 24],
     popupAnchor: [0, -24]
@@ -376,6 +376,28 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
             // Do NOT update routeStartLocation here
         }
     }, [userLocation]);
+
+    // Add this effect to update user location every second for live pin movement (high accuracy)
+    useEffect(() => {
+        let geoWatchId;
+        if (navigator.geolocation && typeof setUserLocation === 'function') {
+            geoWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const { latitude, longitude } = position.coords;
+                    setUserLocation([latitude, longitude]);
+                },
+                (err) => {
+                    // Handle error if needed
+                },
+                { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+            );
+        }
+        return () => {
+            if (geoWatchId && navigator.geolocation) {
+                navigator.geolocation.clearWatch(geoWatchId);
+            }
+        };
+    }, [setUserLocation]);
     
     const fetchBusStops = async () => {
         try {

@@ -12,8 +12,6 @@ import Driver from './components/driver_pages/driver';
 import User from './components/user_pages/user';
 import About from './components/About';
 import AdminDashboard from './components/admin/AdminDashboard';
-import MyLocation from './components/admin/MyLocation';
-import BusTracker from './components/admin/BusTracker';
 import UserProfile from './components/profile/UserProfile';
 import axios from 'axios';
 
@@ -176,22 +174,6 @@ function App() {
             <User />
           </ProtectedRoute>
         } />
-        <Route
-          path="/mylocation"
-          element={
-            <ProtectedRoute>
-              <MyLocation user={user} />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/buses"
-          element={
-            <ProtectedRoute>
-              <BusTracker user={user} />
-            </ProtectedRoute>
-          }
-        />
         <Route 
           path="/profile/:id" 
           element={

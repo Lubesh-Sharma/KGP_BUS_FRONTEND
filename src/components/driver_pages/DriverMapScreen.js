@@ -27,7 +27,7 @@ const busIcon = new L.Icon({
 
 // Bus stop icon
 const busStopIcon = new L.Icon({
-  iconUrl: '/bus-stop.png',
+  iconUrl: '/images/bus-stop.png',
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   popupAnchor: [0, -24]
@@ -35,7 +35,7 @@ const busStopIcon = new L.Icon({
 
 // Next stop icon (highlighted)
 const nextStopIcon = new L.Icon({
-  iconUrl: '/bus-stop.png',
+  iconUrl: '/images/bus-stop.png',
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   popupAnchor: [0, -24]
@@ -232,7 +232,7 @@ const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopInde
   ) : null;
 };
 
-// Improved location tracking with high accuracy
+// Improved location tracking with high accuracy and aggressive options
 const DriverLocationTracker = ({ setPosition }) => {
   const map = useMapEvents({
     locationfound(e) {
@@ -245,33 +245,34 @@ const DriverLocationTracker = ({ setPosition }) => {
   });
 
   useEffect(() => {
+    // Aggressive options for best accuracy
     const locationOptions = {
-      watch: true,
       enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
+      maximumAge: 0,
+      timeout: 20000
     };
 
-    map.locate(locationOptions);
-
+    // Use browser geolocation API directly for best results
+    let watchId;
     if (navigator.geolocation) {
-      const watchId = navigator.geolocation.watchPosition(
+      watchId = navigator.geolocation.watchPosition(
         (position) => {
-          if (position.coords.accuracy < 100) {
-            setPosition([position.coords.latitude, position.coords.longitude]);
-          }
+          setPosition([position.coords.latitude, position.coords.longitude]);
         },
-        (error) => console.warn('Fallback geolocation error:', error),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        (error) => {
+          console.warn('Geolocation error:', error);
+        },
+        locationOptions
       );
-
-      return () => {
-        map.stopLocate();
-        navigator.geolocation.clearWatch(watchId);
-      };
     }
 
+    // Also use leaflet locate as fallback
+    map.locate({ ...locationOptions, watch: true });
+
     return () => {
+      if (watchId && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
       map.stopLocate();
     };
   }, [map, setPosition]);
@@ -306,7 +307,7 @@ const LocationUpdater = ({ driverId, busId, position }) => {
 
     updateLocation();
 
-    const interval = setInterval(updateLocation, 10000);
+    const interval = setInterval(updateLocation, 5000); // 5 seconds
 
     return () => clearInterval(interval);
   }, [position, busId, driverId]);
@@ -345,7 +346,7 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
   const map = useMap();
   const [lastPosition, setLastPosition] = useState(null);
   const initialSetupRef = useRef(true);
-  
+
   // Add map event handler for zoom changes
   useMapEvents({
     zoomend: () => {
@@ -358,26 +359,26 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
       setUserZoomed(true);
     }
   });
-  
+
   useEffect(() => {
     if (!position || !map) return;
-    
+
     // Set maximum zoom on initial position
     if (initialSetupRef.current) {
       map.setView(position, 19); // Maximum zoom on first position
       initialSetupRef.current = false;
       return;
     }
-    
+
     // Check if position has changed significantly
-    if (lastPosition && 
-        position[0] === lastPosition[0] && 
-        position[1] === lastPosition[1]) {
+    if (lastPosition &&
+      position[0] === lastPosition[0] &&
+      position[1] === lastPosition[1]) {
       return; // Position hasn't changed, do nothing
     }
-    
+
     setLastPosition(position);
-    
+
     // If user hasn't manually zoomed, follow the bus with max zoom
     if (!userZoomed) {
       map.setView(position, 19); // Use max zoom level (19)
@@ -385,13 +386,13 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
       // If user has zoomed but bus is outside view, recenter but maintain zoom
       const bounds = map.getBounds();
       const isInBounds = bounds.contains(position);
-      
+
       if (!isInBounds) {
         map.setView(position, map.getZoom());
       }
     }
   }, [map, position, lastPosition, userZoomed]);
-  
+
   return null;
 };
 
@@ -405,24 +406,24 @@ const NextStopDistanceUpdater = ({ position, nextStop }) => {
         parseFloat(nextStop.latitude),
         parseFloat(nextStop.longitude)
       ];
-      
+
       // Calculate distance between driver and next stop (in meters)
       const distance = L.latLng(position).distanceTo(L.latLng(nextStopPosition));
-      
+
       // Update the distance display in the UI
       const distanceElement = document.getElementById('next-stop-distance');
       if (distanceElement) {
         distanceElement.textContent = `${Math.round(distance)} meters`;
       }
     };
-    
+
     // Update immediately and then every second
     updateDistance();
     const interval = setInterval(updateDistance, 1000);
-    
+
     return () => clearInterval(interval);
   }, [position, nextStop]);
-  
+
   return null;
 };
 
@@ -430,13 +431,13 @@ const NextStopDistanceUpdater = ({ position, nextStop }) => {
 const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nextStopIndex }) => {
   const [direction, setDirection] = useState(null);
   const [distance, setDistance] = useState(null);
-  
+
   useEffect(() => {
     if (!stops || !currentPosition || lastClearedStopIndex === null || nextStopIndex === null) return;
-    
+
     // Use nextStop directly
     const nextStop = stops[nextStopIndex];
-    
+
     // Calculate heading and distance continuously
     const calculateDirections = () => {
       const currentPos = L.latLng(currentPosition);
@@ -444,14 +445,14 @@ const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nex
         parseFloat(nextStop.latitude),
         parseFloat(nextStop.longitude)
       );
-      
+
       // Calculate distance to next stop
       const distanceToNext = currentPos.distanceTo(nextStopPos);
       setDistance(Math.round(distanceToNext));
-      
+
       // Get route from current position to next stop
       const bearing = calculateBearing(currentPos, nextStopPos);
-      
+
       // Determine direction based on bearing
       if (bearing >= 337.5 || bearing < 22.5) {
         setDirection('north');
@@ -471,31 +472,31 @@ const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nex
         setDirection('northwest');
       }
     };
-    
+
     // Calculate initially and then every second
     calculateDirections();
     const interval = setInterval(calculateDirections, 1000);
-    
+
     return () => clearInterval(interval);
   }, [stops, currentPosition, lastClearedStopIndex, nextStopIndex]);
-  
+
   // Helper function to calculate bearing between two points
   const calculateBearing = (start, end) => {
     const startLat = start.lat * Math.PI / 180;
     const startLng = start.lng * Math.PI / 180;
     const endLat = end.lat * Math.PI / 180;
     const endLng = end.lng * Math.PI / 180;
-    
+
     const y = Math.sin(endLng - startLng) * Math.cos(endLat);
     const x = Math.cos(startLat) * Math.sin(endLat) -
-              Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
-    
+      Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
+
     let bearing = Math.atan2(y, x) * 180 / Math.PI;
     if (bearing < 0) bearing += 360;
-    
+
     return bearing;
   };
-  
+
   // Always render the directions panel
   return (
     <div className="permanent-directions">
@@ -565,7 +566,7 @@ function DriverMapScreen() {
 
         if (response.data && response.data.data) {
           setBusInfo(response.data.data);
-          
+
           // Only show the modal on first login, not on page refreshes
           if (!initModalShown) {
             setShowTripInitModal(true);
@@ -714,8 +715,8 @@ function DriverMapScreen() {
   return (
     <div className="driver-map-screen">
       {/* Trip Initialization Modal */}
-      <TripInitModal 
-        show={showTripInitModal} 
+      <TripInitModal
+        show={showTripInitModal}
         onClose={handleCloseTripModal}
         busInfo={busInfo}
         onTripInit={handleTripInitialized}
@@ -738,9 +739,9 @@ function DriverMapScreen() {
           <DriverLocationTracker setPosition={setPosition} />
 
           {position && (
-            <KeepBusInView 
-              position={position} 
-              userZoomed={userZoomed} 
+            <KeepBusInView
+              position={position}
+              userZoomed={userZoomed}
               setUserZoomed={setUserZoomed}
             />
           )}
@@ -809,14 +810,14 @@ function DriverMapScreen() {
           )}
 
           <div className="location-button-container">
-            <button 
-              className="location-button" 
-              onClick={() => handleCenterMap(position || 
-                (busInfo && busInfo.nextStop ? 
-                  [parseFloat(busInfo.nextStop.latitude), parseFloat(busInfo.nextStop.longitude)] : 
-                  (busInfo && busInfo.route && busInfo.route.length > 0 ? 
-                    [parseFloat(busInfo.route[0].latitude), parseFloat(busInfo.route[0].longitude)] : 
-                    [22.3190, 87.3091])))} 
+            <button
+              className="location-button"
+              onClick={() => handleCenterMap(position ||
+                (busInfo && busInfo.nextStop ?
+                  [parseFloat(busInfo.nextStop.latitude), parseFloat(busInfo.nextStop.longitude)] :
+                  (busInfo && busInfo.route && busInfo.route.length > 0 ?
+                    [parseFloat(busInfo.route[0].latitude), parseFloat(busInfo.route[0].longitude)] :
+                    [22.3190, 87.3091])))}
               title={position ? "Center map on your location" : "Center map on route"}
             >
               <i className="fas fa-location-arrow"></i> {position ? "Your Location" : "Center Map"}
@@ -842,7 +843,7 @@ function DriverMapScreen() {
             </div>
           )}
           {/* Trip reinitialization button */}
-          <button 
+          <button
             className="trip-init-button"
             onClick={() => setShowTripInitModal(true)}
           >

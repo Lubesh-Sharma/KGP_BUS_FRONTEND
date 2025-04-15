@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import Typed from 'typed.js';
 import '../css/Body.css';
-import backgroundImage from './kgp.png'; // Update this import
+import backgroundImage from '../images/kgp.png';
 
 function Body() {
   const typedElement = useRef(null);
