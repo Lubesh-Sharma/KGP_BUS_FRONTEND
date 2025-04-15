@@ -40,7 +40,7 @@ function BusTracker({ user }) {
         if (response.data && Array.isArray(response.data)) {
           setRoutes(response.data);
         } else {
-          //console.log("No routes data available");
+          ////console.log("No routes data available");
         }
       } catch (err) {
         setError('Failed to fetch routes: ' + (err.response?.data?.message || err.message));
@@ -68,10 +68,10 @@ function BusTracker({ user }) {
       });
       
       if (response.data && Array.isArray(response.data)) {
-        //console.log("Bus locations fetched:", response.data.length);
+        ////console.log("Bus locations fetched:", response.data.length);
         setBuses(response.data);
       } else {
-        //console.log("No bus location data available");
+        ////console.log("No bus location data available");
         setBuses([]);
       }
     } catch (err) {

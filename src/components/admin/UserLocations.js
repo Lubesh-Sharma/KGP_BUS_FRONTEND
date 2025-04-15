@@ -70,7 +70,7 @@ function UserLocations({ user }) {
       );
       
       if (response.data && Array.isArray(response.data)) {
-        //console.log('User locations loaded:', response.data.length);
+        ////console.log('User locations loaded:', response.data.length);
         setRawLocations(response.data);
         setLastRefresh(new Date());
         

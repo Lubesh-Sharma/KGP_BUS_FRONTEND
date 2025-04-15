@@ -32,7 +32,7 @@ const LoginPage = ({ setUser }) => {
     try {
       window.location.href = "/signup";
     } catch (err) {
-      //console.log(err);
+      ////console.log(err);
     }
   };
   
@@ -84,7 +84,7 @@ const LoginPage = ({ setUser }) => {
         window.location.replace(`/logged_in/${role}/${id}`);
       }
     } catch (err) {
-      //console.log(err);
+      ////console.log(err);
       alert(err.response?.data?.message || "Invalid email or password. Please try again.");
       setLoading(false);
     }

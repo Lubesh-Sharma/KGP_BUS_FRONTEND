@@ -146,7 +146,7 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
         L.latLng(endPoint[0], endPoint[1])
       ];
       
-      //console.log("Creating OSRM route with waypoints:", waypoints);
+      ////console.log("Creating OSRM route with waypoints:", waypoints);
       
       const routingControl = L.Routing.control({
         waypoints: waypoints,
@@ -171,7 +171,7 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
 
       // Add listeners to handle loading state
       routingControl.on('routesfound', (e) => {
-        //console.log("OSRM routes found:", e);
+        ////console.log("OSRM routes found:", e);
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
@@ -192,9 +192,9 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
         // Add a longer delay before hiding the loading overlay
         // This ensures routes are fully rendered before the overlay disappears
         setTimeout(() => {
-          //console.log("Routes should be fully rendered now, hiding loading overlay");
+          ////console.log("Routes should be fully rendered now, hiding loading overlay");
           setIsPathLoading(false);
-        }, 3000); // Increased delay to 1.5 seconds to ensure routes are fully drawn
+        }, 1000); // 1 second after routes are drawn
       });
       
       routingControl.on('routingerror', (e) => {
@@ -220,7 +220,7 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
 
       // Set timeout for OSRM - increased to match RouteManagement.js approach
       timeoutRef.current = setTimeout(() => {
-        //console.log("OSRM routing timed out after 30 seconds");
+        ////console.log("OSRM routing timed out after 30 seconds");
         cleanup(); // Clean up routing control and stop loading
       }, 30000); // Increased timeout to 30 seconds to match RouteManagement.js
 
@@ -250,21 +250,6 @@ const MapController = ({ center, zoom }) => {
     return null;
 };
 
-// Component to handle map clicks
-const MapClickHandler = ({ setCoordinates }) => {
-    useMapEvents({
-        click: (e) => {
-            const { lat, lng } = e.latlng;
-            setCoordinates({
-                latitude: lat.toFixed(6),
-                longitude: lng.toFixed(6)
-            });
-        }
-    });
-    
-    return null;
-};
-
 // Button to center on user's location
 const LocationButton = ({ userLocation, onClick }) => {
     return (
@@ -289,52 +274,42 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         latitude: '',
         longitude: ''
     });
-    // Initialize searchMarker with current coordinates or map center
     const [searchMarker, setSearchMarker] = useState(userLocation || [22.3190, 87.3091]);
     const [searchResults, setSearchResults] = useState([]);
     const [hasSearched, setHasSearched] = useState(false);
     const [isPathLoading, setIsPathLoading] = useState(false);
     const [selectedStop, setSelectedStop] = useState(null);
+    const [routeStartLocation, setRouteStartLocation] = useState(null); // Store the user location used for routing
     
-    // New state variables for location search
     const [locationQuery, setLocationQuery] = useState('');
     const [locationSearching, setLocationSearching] = useState(false);
     const [locationError, setLocationError] = useState(null);
     
-    // New state for multiple location search results
     const [locationResults, setLocationResults] = useState([]);
     const [showLocationResults, setShowLocationResults] = useState(false);
     
     const mapRef = useRef(null);
     const markerRefs = useRef({});
     
-    // Register marker references for later access
     const registerMarker = (id, markerRef) => {
         if (markerRef) {
             markerRefs.current[id] = markerRef;
         }
     };
 
-    // Function to clear any existing routes on the map - improved error handling and reliability
     const clearExistingRoutes = () => {
-        // Access map instance
         const map = mapRef.current?._leaflet_map;
         if (!map) return;
         
-        //console.log("Clearing all existing routes");
-        
+        ////console.log("Clearing all existing routes");
         try {
-            // First remove any OSRM routing control instances
-            // This must be done before removing layers to prevent null layer errors
             if (map._container) {
-                // Remove routing containers from DOM which may cause null layer errors
                 const routingContainers = map._container.querySelectorAll('.leaflet-routing-container');
                 routingContainers.forEach(container => {
                     container.remove();
                 });
             }
             
-            // Check for global routing controls and clean them up
             if (window.L && window.L.Routing && window.L.Routing._routingControls) {
                 window.L.Routing._routingControls.forEach(control => {
                     try {
@@ -348,13 +323,10 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 window.L.Routing._routingControls = [];
             }
             
-            // Track which layers to remove to avoid modifying the collection during iteration
             const layersToRemove = [];
             
-            // Identify all routing or polyline layers for removal
             map.eachLayer(layer => {
                 try {
-                    // More comprehensive check for routing layers and polylines
                     const isRoutingLayer = 
                         layer._route || 
                         layer._routing ||
@@ -367,22 +339,19 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         ));
                         
                     if (isRoutingLayer) {
-                        //console.log("Marking layer for removal:", layer);
+                        ////console.log("Marking layer for removal:", layer);
                         layersToRemove.push(layer);
                     }
                 } catch (err) {
-                    // Catch and log errors during layer checking
                     console.warn("Error checking layer for removal:", err);
                 }
             });
             
-            // Remove identified layers in a separate step to avoid collection modification issues
             layersToRemove.forEach(layer => {
                 try {
                     map.removeLayer(layer);
                 } catch (err) {
                     console.warn("Error removing layer:", err);
-                    // Try alternative removal for problematic layers
                     if (layer._container && layer._container.parentNode) {
                         layer._container.parentNode.removeChild(layer._container);
                     }
@@ -391,13 +360,11 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         } catch (err) {
             console.error("Error during route clearing:", err);
         } finally {
-            // Reset state regardless of success or failure
             setSelectedStop(null);
             setIsPathLoading(false);
         }
     };
 
-    // Initialize coordinates with user's location as soon as it's available
     useEffect(() => {
         if (userLocation) {
             setCoordinates({
@@ -405,21 +372,18 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 longitude: userLocation[1].toFixed(6)
             });
             setMapCenter(userLocation);
-            setSearchMarker(userLocation); // Also update the search marker when user location changes
+            setSearchMarker(userLocation);
+            // Do NOT update routeStartLocation here
         }
     }, [userLocation]);
     
-    // Fetch all bus stops directly from the database
     const fetchBusStops = async () => {
         try {
-            //console.log('Fetching bus stops from API');
+            ////console.log('Fetching bus stops from API');
             const response = await api.get('/bus_stops/getAllBusStops');
-            //console.log('Raw API response:', response.data);
             
-            // Extract the actual bus stops array from the response
-            // The API returns { statusCode, data, message } structure
             if (response.data && response.data.data) {
-                return response.data.data; // Return just the array of bus stops
+                return response.data.data;
             } else {
                 console.error('Invalid response format:', response.data);
                 return [];
@@ -430,17 +394,14 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }
     };
     
-    // Load bus stops on component mount
     useEffect(() => {
         const loadBusStops = async () => {
             try {
                 setLoading(true);
                 const data = await fetchBusStops();
                 
-                // Ensure data is an array before mapping
                 const busStopsArray = Array.isArray(data) ? data : [];
                 
-                // Clean and format the data
                 const cleanedData = busStopsArray.map(stop => ({
                     ...stop,
                     latitude: parseFloat(stop.latitude),
@@ -460,7 +421,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         loadBusStops();
     }, []);
     
-    // Handle form input changes
     const handleInputChange = (e) => {
         const { name, value } = e.target;
         setCoordinates(prev => ({
@@ -469,13 +429,11 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }));
     };
     
-    // Center map on user location with maximum zoom
     const handleCenterOnUser = () => {
         if (userLocation) {
             setMapCenter(userLocation);
-            setZoom(19); // Maximum zoom
+            setZoom(19);
 
-            // Also update the coordinate inputs to match user location
             setCoordinates({
                 latitude: userLocation[0].toFixed(6),
                 longitude: userLocation[1].toFixed(6)
@@ -483,13 +441,11 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }
     };
     
-    // Function to search for nearby bus stops - Fixed error handling
     const handleSearch = () => {
         try {
             const lat = parseFloat(coordinates.latitude);
             const lng = parseFloat(coordinates.longitude);
             
-            // Validate coordinates
             if (isNaN(lat) || isNaN(lng) || 
                 lat < -90 || lat > 90 || 
                 lng < -180 || lng > 180) {
@@ -497,13 +453,13 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 return;
             }
             
-            // Clear any existing routes before continuing
             clearExistingRoutes();
+            setSelectedStop(null);
+            setRouteStartLocation(null);
             
             setError(null);
             setSearchMarker([lat, lng]);
             
-            // Make sure busStops is an array before processing
             if (!Array.isArray(busStops) || busStops.length === 0) {
                 setError("No bus stops data available");
                 setSearchResults([]);
@@ -511,9 +467,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 return;
             }
             
-            // Calculate distance from specified point to all bus stops
             const results = busStops.map(stop => {
-                // Skip invalid coordinates
                 if (stop === null || typeof stop !== 'object' || 
                     typeof stop.latitude !== 'number' || 
                     typeof stop.longitude !== 'number' || 
@@ -521,7 +475,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     return null;
                 }
                 
-                // Calculate distance in meters using Haversine formula
                 const distance = calculateDistance(
                     lat, lng,
                     stop.latitude, stop.longitude
@@ -531,14 +484,12 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     ...stop,
                     distance: distance
                 };
-            }).filter(stop => stop !== null); // Remove any null results
+            }).filter(stop => stop !== null);
             
-            // Sort by distance (closest first)
             const sortedResults = [...results].sort((a, b) => a.distance - b.distance);
             setSearchResults(sortedResults);
             setHasSearched(true);
             
-            // Center map on search marker
             setMapCenter([lat, lng]);
             setZoom(16);
         } catch (error) {
@@ -547,54 +498,33 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }
     };
     
-    // Handle click on search result item - Improved with better error handling
     const handleStopSelect = (stop) => {
         try {
-            //console.log("Stop selected:", stop);
+            ////console.log("Stop selected:", stop);
             
             // First, explicitly call clearExistingRoutes to remove any existing routes
             clearExistingRoutes();
-            
-            // Show loading overlay immediately when a stop is selected
             setIsPathLoading(true);
-            
-            // Set the map center and zoom
-            setMapCenter([stop.latitude, stop.longitude]);
-            setZoom(15); // Slightly reduce zoom from 18 to show more context
-            
-            // Delay adding the new route to ensure complete cleanup
             setTimeout(() => {
-                try {
-                    // Set the new selected stop
-                    setSelectedStop(stop);
-                    
-                    // Open the popup for this marker
-                    const marker = markerRefs.current[stop.id];
-                    if (marker) {
-                        marker.openPopup();
-                    }
-                } catch (err) {
-                    console.error("Error setting selected stop:", err);
-                    // Make sure loading overlay is hidden if there's an error
-                    setIsPathLoading(false);
+                setSelectedStop(stop);
+                setRouteStartLocation(searchMarker ? [...searchMarker] : null); // Use red pin for routing
+                const marker = markerRefs.current[stop.id];
+                if (marker) {
+                    marker.openPopup();
                 }
-            }, 500); // Increased timeout for more reliable clearing
+            }, 500);
         } catch (err) {
-            console.error("Error in handleStopSelect:", err);
-            // Make sure loading overlay is hidden if there's an error
             setIsPathLoading(false);
         }
     };
 
-    // Calculate distance between two coordinates using Haversine formula
     const calculateDistance = (lat1, lon1, lat2, lon2) => {
-        // Ensure all coordinates are valid numbers
         if (isNaN(lat1) || isNaN(lon1) || isNaN(lat2) || isNaN(lon2)) {
-            return Infinity; // Return a very large distance for invalid coordinates
+            return Infinity;
         }
         
         try {
-            const R = 6371e3; // Earth's radius in meters
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -605,14 +535,13 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     Math.sin(Δλ/2) * Math.sin(Δλ/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             
-            return R * c; // Distance in meters
+            return R * c;
         } catch (error) {
             console.error("Error calculating distance:", error);
-            return Infinity; // Return a very large distance if calculation fails
+            return Infinity;
         }
     };
     
-    // Format distance for display
     const formatDistance = (meters) => {
         if (meters < 1000) {
             return `${Math.round(meters)} meters`;
@@ -621,7 +550,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }
     };
     
-    // Modified function to handle location search using Nominatim API
     const handleLocationSearch = async () => {
         if (!locationQuery.trim()) {
             setLocationError("Please enter a location to search");
@@ -632,37 +560,32 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
             setLocationSearching(true);
             setLocationError(null);
             
-            // Clear any existing routes
             clearExistingRoutes();
             
-            // Reset previous location results
             setLocationResults([]);
             setShowLocationResults(false);
             
-            // Use OpenStreetMap's Nominatim API for geocoding
             const response = await axios.get(`https://nominatim.openstreetmap.org/search`, {
                 params: {
                     q: locationQuery,
                     format: 'json',
-                    limit: 5, // Increased limit to get multiple results
-                    addressdetails: 1 // Get address details for better display
+                    limit: 5,
+                    addressdetails: 1
                 },
                 headers: {
                     'Accept-Language': 'en-US,en;q=0.9',
-                    'User-Agent': 'KGP_Bus_Application' // Identify your application to the API
+                    'User-Agent': 'KGP_Bus_Application'
                 },
                 withCredentials: true
             });
             
-            // Check if any results were found
             if (response.data && response.data.length > 0) {
-                //console.log('Location search results:', response.data);
+                ////console.log('Location search results:', response.data);
                 
                 // Store all location results
                 setLocationResults(response.data);
                 setShowLocationResults(true);
                 
-                // If only one result, select it automatically
                 if (response.data.length === 1) {
                     handleLocationSelect(response.data[0]);
                 }
@@ -677,33 +600,26 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         }
     };
     
-    // New function to handle selection of a location result
     const handleLocationSelect = (location) => {
         const lat = parseFloat(location.lat);
         const lng = parseFloat(location.lon);
         
-        // Update coordinates
         setCoordinates({
             latitude: lat.toFixed(6),
             longitude: lng.toFixed(6)
         });
         
-        // Update search marker
         setSearchMarker([lat, lng]);
         
-        // Center map on the selected location
         setMapCenter([lat, lng]);
         setZoom(15);
         
-        // Hide location results after selection
         setShowLocationResults(false);
-        
-        //console.log(`Selected location: ${location.display_name} at ${lat}, ${lng}`);
+        ////console.log(`Selected location: ${location.display_name} at ${lat}, ${lng}`);
     };
 
     return (
         <div className="bus-stop-search">
-            {/* Enhanced full-page loading overlay for OSRM loading */}
             {isPathLoading && (
                 <div className="full-page-loading-overlay">
                     <div className="spinner"></div>
@@ -715,7 +631,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                 <div className="location-panel-top">
                     <h2>Search Bus Stops</h2>
                     
-                    {/* Location search box */}
                     <div className="location-search-container">
                         <div className="form-group">
                             <label htmlFor="location-search">Search by Location Name:</label>
@@ -740,7 +655,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                             {locationError && <div className="error-message">{locationError}</div>}
                             <p className="help-text">Enter a location name, address, or landmark to search</p>
                             
-                            {/* New location results display */}
                             {showLocationResults && locationResults.length > 0 && (
                                 <div className="location-results">
                                     <h4>Select a location:</h4>
@@ -847,7 +761,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     zoom={zoom}
                     style={{ height: "100%", width: "100%" }}
                     ref={(ref) => {
-                        // Store reference to the map for route clearing
                         if (ref) {
                             mapRef.current = { _leaflet_map: ref };
                         }
@@ -861,7 +774,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     <MapController center={mapCenter} zoom={zoom} />
                     <MapEvents setCoordinates={setCoordinates} setSearchMarker={setSearchMarker} clearExistingRoutes={clearExistingRoutes} setSelectedStop={setSelectedStop} />
                     
-                    {/* Display user location */}
                     {userLocation && (
                         <Marker position={userLocation} icon={userIcon}>
                             <Popup>
@@ -873,7 +785,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         </Marker>
                     )}
                     
-                    {/* Always display search marker */}
                     {searchMarker && (
                         <Marker position={searchMarker} icon={searchMarkerIcon}>
                             <Popup>
@@ -885,7 +796,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         </Marker>
                     )}
                     
-                    {/* Display all bus stops */}
                     {busStops.map(stop => (
                         <Marker
                             key={stop.id}
@@ -911,11 +821,10 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         </Marker>
                     ))}
                     
-                    {/* Add routing control for selected bus stop with forced re-creation and a longer random key */}
-                    {searchMarker && selectedStop && (
+                    {routeStartLocation && selectedStop && (
                         <RoutingControl
                             key={`route-${selectedStop.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`}
-                            startPoint={searchMarker}
+                            startPoint={routeStartLocation}
                             endPoint={[selectedStop.latitude, selectedStop.longitude]}
                             color="#ff6b6b"
                             weight={4}
@@ -923,7 +832,6 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         />
                     )}
                     
-                    {/* Button inside map container for centering on user location */}
                     <div className="map-controls">
                         <LocationButton
                             userLocation={userLocation}
@@ -936,18 +844,15 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     );
 };
 
-// Updated component to handle map clicks and clear routes
 const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSelectedStop }) => {
     useMapEvents({
         click: (e) => {
             const { lat, lng } = e.latlng;
             
-            // Clear any existing routes before setting new coordinates
             if (typeof clearExistingRoutes === 'function') {
                 clearExistingRoutes();
             }
             
-            // Reset selected stop when clicking on a new location
             if (typeof setSelectedStop === 'function') {
                 setSelectedStop(null);
             }
@@ -956,7 +861,7 @@ const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSe
                 latitude: lat.toFixed(6),
                 longitude: lng.toFixed(6)
             });
-            setSearchMarker([lat, lng]); // Update marker immediately
+            setSearchMarker([lat, lng]);
         }
     });
     

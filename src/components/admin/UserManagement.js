@@ -34,7 +34,7 @@ function UserManagement({ user }) {
           setError('');
 
           const apiUrl = getApiUrl('/admin/users'); // Ensure correct endpoint
-          //console.log('Fetching users from:', apiUrl);
+          ////console.log('Fetching users from:', apiUrl);
 
           const response = await axios.get(apiUrl, {
             headers: {

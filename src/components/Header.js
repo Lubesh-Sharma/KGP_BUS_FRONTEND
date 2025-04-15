@@ -9,7 +9,13 @@ function Header({ user, updateUser }) {
   const navigate = useNavigate();
   
   const handleLogoClick = () => {
-    navigate('/');
+    // If user is logged in, navigate to their role-specific dashboard
+    // Otherwise navigate to public home
+    if (user) {
+      navigate(`/logged_in/${user.role}/${user.id}`);
+    } else {
+      navigate('/');
+    }
   };
 
   const handleLogout = async () => {
@@ -18,15 +24,15 @@ function Header({ user, updateUser }) {
       
       if (token) {
         try {
-            await axios.post(`${BACKEND_URL}/logout`, {}, {
+          await axios.post(`${BACKEND_URL}/logout`, {}, {
             headers: {
               'Authorization': `Bearer ${token}`
             },
             withCredentials: true
-            });
+          });
         } catch (error) {
           // If token is expired or invalid, just log it - we'll still clear local storage
-          //console.log('Logout API call failed, continuing with local logout');
+          // console.log('Logout API call failed, continuing with local logout');
         }
       }
       
@@ -62,7 +68,7 @@ function Header({ user, updateUser }) {
             </li>
           )}
           <li>
-            <Link to="/" className="nav-link">Home</Link>
+            <Link to={user ? `/logged_in/${user.role}/${user.id}` : "/"} className="nav-link">Home</Link>
           </li>
           <li>
             <Link to="/about" className="nav-link">About Us</Link>

@@ -1184,3 +1184,55 @@
 .bus-popup, .stop-popup {
   min-width: 200px;
 }
+
+/* Popup overlay and container for tracking (centered) */
+.tracking-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0,0,0,0.5);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tracking-popup-container {
+  position: relative;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.2);
+  max-width: 90vw;
+  max-height: 90vh;
+  width: 900px;
+  height: 80vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  z-index: 10001;
+}
+
+.tracking-popup-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 10002;
+  background: #ff3333;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.tracking-popup-close-btn:hover {
+  background: #d32f2f;
+}

@@ -191,6 +191,8 @@ function RouteManagement({ user }) {
     const [editingTimeId, setEditingTimeId] = useState(null); // State to track which start time is being edited
     const [newStartTime, setNewStartTime] = useState(''); // State for new start time input
     const [isAddingStartTime, setIsAddingStartTime] = useState(false); // State to track if adding new start time
+    const [busLocation, setBusLocation] = useState(null);
+    const [locationRefreshInterval, setLocationRefreshInterval] = useState(null);
 
     const [formData, setFormData] = useState({
         bus_id: '',
@@ -404,6 +406,9 @@ function RouteManagement({ user }) {
                 setTimeout(() => {
                     setMapLoading(false);
                 }, 1000);
+
+                // Fetch bus location immediately after selecting the bus
+                await fetchBusLocation(busId);
             } catch (err) {
                 setError('Error fetching route data: ' + err.message);
                 console.error("Error fetching routes for bus:", err);
@@ -833,16 +838,15 @@ function RouteManagement({ user }) {
     // Simplified version - remove the special handling for start/end stops
     // since we're treating it as a circular route
     const getStopIcon = () => {
-        // Use a single color for all stops in a circular route
-        return L.icon({
-            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
-            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-            iconSize: [25, 41],
-            iconAnchor: [12, 41],
-            popupAnchor: [1, -34],
-            shadowSize: [41, 41]
+        // Use custom bus stop icon
+        return new L.Icon({
+            iconUrl: '/bus-stop.png',
+            iconSize: [24, 24],
+            iconAnchor: [12, 24],
+            popupAnchor: [0, -24]
         });
     };
+    
 
     // Begin editing a stop including name
     const handleEditStopFull = (routeId) => {
@@ -923,6 +927,106 @@ function RouteManagement({ user }) {
             stop_id: '',
             stop_order: '',
             time_from_start: ''
+        });
+    };
+
+    // Enhanced function to fetch bus location with proper debugging
+    const fetchBusLocation = async (busId) => {
+        try {
+            console.log('Fetching bus location for ID:', busId);
+            
+            // Use the API endpoint from api2.js instead of hardcoding the path
+            const requestUrl = getApiUrl(api.endpoints.adminBusLocation(busId));
+            console.log('Request URL:', requestUrl);
+            
+            const response = await axios.get(
+                requestUrl,
+                { 
+                    headers: { 
+                        Authorization: `Bearer ${user.token}`,
+                        'Accept': 'application/json'
+                    }
+                }
+            );
+            
+            console.log('Bus location response:', response.data);
+            
+            if (response.data) {
+                // Parse latitude and longitude as numbers
+                const lat = parseFloat(response.data.latitude);
+                const lng = parseFloat(response.data.longitude);
+                
+                console.log('Parsed coordinates:', { lat, lng });
+                
+                if (!isNaN(lat) && !isNaN(lng)) {
+                    console.log('Setting valid bus location');
+                    setBusLocation({
+                        latitude: lat,
+                        longitude: lng,
+                        timestamp: response.data.timestamp
+                    });
+                    
+                    // Center map on bus location for better visibility
+                    if (mapRef.current) {
+                        console.log('Centering map on bus location');
+                        const map = mapRef.current;
+                        map.setView([lat, lng], map.getZoom() || 15);
+                    }
+                } else {
+                    console.error('Invalid location coordinates in response:', response.data);
+                    setBusLocation(null);
+                }
+            }
+        } catch (err) {
+            console.error('Error fetching bus location:', err);
+            console.log('Error details:', err.response?.data || err.message);
+            setBusLocation(null);
+        }
+    };
+
+    // Set up polling for bus location when a bus is selected
+    useEffect(() => {
+        // Clear previous interval if it exists
+        if (locationRefreshInterval) {
+            clearInterval(locationRefreshInterval);
+        }
+
+        // If a bus is selected, start fetching its location
+        if (selectedBus) {
+            console.log(`Setting up location polling for bus ID: ${selectedBus}`);
+            
+            // Fetch location immediately
+            fetchBusLocation(selectedBus);
+            
+            // Set up interval to refresh location every 10 seconds
+            const intervalId = setInterval(() => {
+                console.log(`Polling location for bus ID: ${selectedBus}`);
+                fetchBusLocation(selectedBus);
+            }, 10000);
+            
+            setLocationRefreshInterval(intervalId);
+            
+            // Clean up interval on unmount or when bus changes
+            return () => {
+                console.log('Cleaning up location interval');
+                clearInterval(intervalId);
+            };
+        } else {
+            // Reset bus location if no bus is selected
+            setBusLocation(null);
+        }
+    }, [selectedBus, user.token]);
+
+    // Enhanced bus icon for better visibility
+    const getBusIcon = () => {
+        return L.icon({
+            iconUrl: 'https://cdn-icons-png.flaticon.com/512/3448/3448339.png', // Better bus icon
+            iconSize: [50, 50],  // Larger size
+            iconAnchor: [25, 50],
+            popupAnchor: [0, -45],
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
+            shadowSize: [41, 41],
+            shadowAnchor: [12, 41]
         });
     };
 
@@ -1215,6 +1319,16 @@ function RouteManagement({ user }) {
                                     </p>
                                 </div>
                             )}
+
+                            {/* Add bus location status indicator */}
+                            {busLocation && (
+                                <div className="route-status bus-location-status">
+                                    <p>
+                                        <strong>Live Bus Location:</strong> Last updated {busLocation.timestamp ? 
+                                            new Date(busLocation.timestamp).toLocaleString() : 'N/A'}
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Map Container - Right Side */}
@@ -1223,7 +1337,10 @@ function RouteManagement({ user }) {
                                 center={mapCenter}
                                 zoom={zoom}
                                 style={{ height: '100%', width: '100%' }}
-                                whenCreated={mapInstance => mapRef.current = mapInstance}
+                                whenCreated={mapInstance => {
+                                    console.log('Map created');
+                                    mapRef.current = mapInstance;
+                                }}
                             >
                                 <TileLayer
                                     url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -1231,6 +1348,30 @@ function RouteManagement({ user }) {
                                 />
                                 <MapUpdater center={mapCenter} zoom={zoom} />
                                 <RoadBasedRoutes stops={formData.stops} />
+
+                                {/* Add bus location marker with better debug */}
+                                {busLocation ? (
+                                    <Marker 
+                                        key={`bus-location-${selectedBus}-${Date.now()}`} 
+                                        position={[busLocation.latitude, busLocation.longitude]}
+                                        icon={getBusIcon()}
+                                        zIndexOffset={1000} // Ensure it's on top of other markers
+                                    >
+                                        <Popup>
+                                            <div>
+                                                <strong>{getBusById(selectedBus)?.name}</strong>
+                                                <br />
+                                                <span>Live Location</span>
+                                                <br />
+                                                <span>Coordinates: {busLocation.latitude.toFixed(6)}, {busLocation.longitude.toFixed(6)}</span>
+                                                <br />
+                                                <span>Last updated: {new Date(busLocation.timestamp).toLocaleString()}</span>
+                                            </div>
+                                        </Popup>
+                                    </Marker>
+                                ) : (
+                                    <div style={{ display: 'none' }}>Bus location not available</div>
+                                )}
 
                                 {stops.map(stop => {
                                     const appearances = formData.stops.filter(s => 

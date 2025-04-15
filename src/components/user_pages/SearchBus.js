@@ -6,7 +6,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css';
-
+import BusTracking from './BusTracking';
 
 // Custom icons for the map
 const busIcon = new L.Icon({
@@ -89,21 +89,22 @@ const BusStopsView = ({ userLocation }) => {
   const [buses, setBuses] = useState([]);
   const [searchPerformed, setSearchPerformed] = useState(false);
   const [searchingBuses, setSearchingBuses] = useState(false);
-  // Add these new state variables to your BusStopsView component
   const [lastUpdated, setLastUpdated] = useState(null);
   const [busInfo, setBusInfo] = useState(null);
   const [nextStop, setNextStop] = useState(null);
   const [currentStop, setCurrentStop] = useState(null);
   const [isPathLoading, setIsPathLoading] = useState(false);
 
-
-  // New state variables for tracking
   const [showMap, setShowMap] = useState(false);
   const [trackingBus, setTrackingBus] = useState(null);
   const [busLocation, setBusLocation] = useState(null);
   const [busStopsRoute, setBusStopsRoute] = useState([]);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackingError, setTrackingError] = useState(null);
+
+  const [showTrackPopup, setShowTrackPopup] = useState(false);
+  const [trackBusObj, setTrackBusObj] = useState(null);
+  const [isPopupLoading, setIsPopupLoading] = useState(false); // Track loading state for popup
 
   const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, setIsPathLoading }) => {
     const map = useMap();
@@ -112,13 +113,10 @@ const BusStopsView = ({ userLocation }) => {
     useEffect(() => {
       if (!startPoint || !endPoint) return;
 
-      // Configure routing machine when component mounts
       configureRoutingMachine();
 
-      // Indicate loading has started
       setIsPathLoading(true);
 
-      // Clear previous routing if it exists and ensure it is attached to the map
       if (routingControlRef.current && map && map.hasLayer(routingControlRef.current)) {
         map.removeControl(routingControlRef.current);
         routingControlRef.current = null;
@@ -140,13 +138,12 @@ const BusStopsView = ({ userLocation }) => {
             extendToWaypoints: true,
             missingRouteTolerance: 0
           },
-          createMarker: () => null, // No markers from routing
-          serviceUrl: 'https://router.project-osrm.org/route/v1' // Explicitly set OSRM service
+          createMarker: () => null,
+          serviceUrl: 'https://router.project-osrm.org/route/v1'
         });
 
-        // Add listeners to handle loading state
         routingControl.on('routesfound', () => {
-          setTimeout(() => setIsPathLoading(false), 300); // Short delay to ensure UI is updated
+          setTimeout(() => setIsPathLoading(false), 300);
         });
 
         routingControl.on('routingerror', () => {
@@ -157,14 +154,12 @@ const BusStopsView = ({ userLocation }) => {
         routingControl.addTo(map);
         routingControlRef.current = routingControl;
 
-        // Add a timeout in case routing takes too long
         const timeout = setTimeout(() => {
           setIsPathLoading(false);
-        }, 10000); // 10 second timeout
+        }, 10000);
 
         return () => {
           clearTimeout(timeout);
-          // Cleanup: remove the control if it exists on the map
           if (routingControlRef.current && map && map.hasLayer(routingControlRef.current)) {
             map.removeControl(routingControlRef.current);
           }
@@ -178,7 +173,7 @@ const BusStopsView = ({ userLocation }) => {
 
     return null;
   };
-  // Fetch all bus stops when component mounts
+
   useEffect(() => {
     const fetchBusStops = async () => {
       setLoading(true);
@@ -202,7 +197,6 @@ const BusStopsView = ({ userLocation }) => {
     fetchBusStops();
   }, []);
 
-  // Filter bus stops based on input
   useEffect(() => {
     if (fromStop.trim() === '') {
       setFilteredFromStops(busStops);
@@ -225,7 +219,6 @@ const BusStopsView = ({ userLocation }) => {
     }
   }, [toStop, busStops]);
 
-  // Handle bus stops selection
   const handleFromStopSelect = (stop) => {
     setFromStop(stop.name);
     setFromStopId(stop.id);
@@ -238,56 +231,12 @@ const BusStopsView = ({ userLocation }) => {
     setToDropdownOpen(false);
   };
 
-  // Implementation of handleTrackBus function
-
-  // Update the handleTrackBus function
-  const handleTrackBus = async (busId) => {
-    //console.log(`Tracking bus with ID: ${busId}`);
-
-    // Show tracking UI and set loading state
-    setShowMap(true);
-    setTrackingLoading(true);
-    setTrackingError(null);
-
-    try {
-      // Find selected bus from buses state
-      const selectedBus = buses.find(bus => bus.id === busId);
-      setTrackingBus(selectedBus);
-
-      // Fetch bus location
-      const locationResponse = await api.get(`/buses/${busId}/location`);
-      if (locationResponse.data && locationResponse.data.data) {
-        const location = locationResponse.data.data;
-        setBusLocation([parseFloat(location.latitude), parseFloat(location.longitude)]);
-        setLastUpdated(new Date(location.timestamp)); // Save the timestamp
-      } else {
-        setBusLocation(null);
-      }
-
-      // Fetch route with stops
-      const routeResponse = await api.get(`/abusroute/${busId}/route-with-stops`);
-      if (routeResponse.data && routeResponse.data.data) {
-        const routeData = routeResponse.data.data;
-        setBusStopsRoute(routeData.stops);
-
-        // Set current and next stop if available
-        if (routeData.currentStop) setCurrentStop(routeData.currentStop);
-        if (routeData.nextStop) setNextStop(routeData.nextStop);
-      }
-
-      // Fetch bus info (includes driver, ETA etc.)
-      const infoResponse = await api.get(`/buses/${busId}/info`);
-      if (infoResponse.data && infoResponse.data.data) {
-        setBusInfo(infoResponse.data.data);
-      }
-    } catch (err) {
-      console.error('Error fetching bus tracking data:', err);
-      setTrackingError('Failed to load bus tracking data. Please try again.');
-    } finally {
-      setTrackingLoading(false);
-    }
+  const handleTrackBus = (busId) => {
+    const selectedBus = buses.find(bus => bus.id === busId);
+    setTrackBusObj(selectedBus);
+    setShowTrackPopup(true);
   };
-  // Handle search for buses
+
   const handleSearch = async () => {
     if (!fromStopId || !toStopId) {
       alert('Please select both From and To bus stops');
@@ -310,7 +259,7 @@ const BusStopsView = ({ userLocation }) => {
       console.error('Error searching buses:', err);
       if (err.response && err.response.status === 404) {
         alert('No buses found for this route');
-        setSearchPerformed(true); // Still mark search as performed, just with no results
+        setSearchPerformed(true);
       } else {
         alert('Failed to search buses. Please try again.');
       }
@@ -319,7 +268,6 @@ const BusStopsView = ({ userLocation }) => {
     }
   };
 
-  // Format time to display in 12-hour format with AM/PM
   const formatTime = (timeString) => {
     const [hours, minutes] = timeString.split(':');
     const hour = parseInt(hours, 10);
@@ -328,7 +276,6 @@ const BusStopsView = ({ userLocation }) => {
     return `${hour12}:${minutes} ${ampm}`;
   };
 
-  // Reset search - updated to also clear dropdown input fields
   const handleResetSearch = () => {
     setSearchPerformed(false);
     setBuses([]);
@@ -338,9 +285,6 @@ const BusStopsView = ({ userLocation }) => {
     setToStopId(null);
   };
 
-  // Bus Tracking Map Component
-
-  // Update the BusTrackingMap component
   const BusTrackingMap = ({ bus, busLocation, busStops, onClose }) => {
     return (
       <div className="tracking-overlay">
@@ -378,9 +322,6 @@ const BusStopsView = ({ userLocation }) => {
                     .map(stop => (
                       <li key={stop.id} style={{ color: stop.cleared ? '#00ff00' : '#0000ff' }}>
                         {stop.stop_order}. {stop.name}
-                        {/* {nextStop && nextStop.id === stop.id && busInfo && busInfo.estimatedArrival && (
-                          <span className="stop-time"> - {busInfo.estimatedArrival} min</span>
-                        )} */}
                         {(
                           <span className="stop-time"> - {stop.estimated_time}</span>
                         )}
@@ -394,7 +335,7 @@ const BusStopsView = ({ userLocation }) => {
 
             <div className="tracking-map">
               <MapContainer
-                center={busLocation || [22.3190, 87.3091]} // Default to IIT KGP
+                center={busLocation || [22.3190, 87.3091]}
                 zoom={15}
                 style={{ height: "100%", width: "100%" }}
               >
@@ -447,7 +388,6 @@ const BusStopsView = ({ userLocation }) => {
                   ))
                 )}
 
-                {/* Render actual route lines between adjacent bus stops using RoutingControl */}
                 {busStops.length > 1 && (
                   [...busStops]
                     .sort((a, b) => a.stop_order - b.stop_order)
@@ -471,22 +411,15 @@ const BusStopsView = ({ userLocation }) => {
             </div>
           </div>
         </div>
-        {/* Full-page loading overlay for OSRM routing
-        {isPathLoading && (
-          <div className="full-page-loading-overlay">
-            <div className="spinner"></div>
-            <div>Loading routes. Please wait...</div>
-          </div>
-        )} */}
       </div>
     );
   };
+
   return (
     <div className="bus-stops-view">
       <div className="control-panel">
         <h2>Search Buses by Route</h2>
 
-        {/* From Stop Selection */}
         <div className="form-group">
           <label htmlFor="fromStop">From Bus Stop</label>
           <div className="dropdown-input-container">
@@ -522,7 +455,6 @@ const BusStopsView = ({ userLocation }) => {
           )}
         </div>
 
-        {/* To Stop Selection */}
         <div className="form-group">
           <label htmlFor="toStop">To Bus Stop</label>
           <div className="dropdown-input-container">
@@ -558,12 +490,10 @@ const BusStopsView = ({ userLocation }) => {
           )}
         </div>
 
-        {/* Display error message if any */}
         {errorMessage && (
           <div className="error-message">{errorMessage}</div>
         )}
 
-        {/* Search Button */}
         <button
           className="search-btn"
           onClick={handleSearch}
@@ -619,21 +549,21 @@ const BusStopsView = ({ userLocation }) => {
                       </div>
                     </div>
 
-                    <div className="bus-info">
-                      <div className="bus-detail">
-                        <i className="fas fa-clock"></i>
-                        <span>Bus Start: {formatTime(bus.times.busStart)}</span>
+                    <div className="bus-info-actions" style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '8px' }}>
+                      <div className="bus-info">
+                        <div className="bus-detail">
+                          <i className="fas fa-clock"></i>
+                          <span>Bus Start: {formatTime(bus.times.busStart)}</span>
+                        </div>
+                        <div className="bus-detail">
+                          <i className="fas fa-map-marker-alt"></i>
+                          <span>Bus ID: {bus.id}</span>
+                        </div>
                       </div>
-                      <div className="bus-detail">
-                        <i className="fas fa-map-marker-alt"></i>
-                        <span>Bus ID: {bus.id}</span>
-                      </div>
-                    </div>
-
-                    <div className="bus-actions">
                       <button
                         className="track-bus-btn"
                         onClick={() => handleTrackBus(bus.id)}
+                        style={{ marginLeft: '16px' }}
                       >
                         <i className="fas fa-location-arrow"></i> Track Bus
                       </button>
@@ -658,7 +588,6 @@ const BusStopsView = ({ userLocation }) => {
         )}
       </div>
 
-      {/* Bus tracking map overlay */}
       {showMap && trackingBus && (
         <BusTrackingMap
           bus={trackingBus}
@@ -668,7 +597,6 @@ const BusStopsView = ({ userLocation }) => {
         />
       )}
 
-      {/* Loading overlay for tracking */}
       {trackingLoading && (
         <div className="loading-overlay">
           <div className="spinner"></div>
@@ -676,10 +604,34 @@ const BusStopsView = ({ userLocation }) => {
         </div>
       )}
 
-      {/* Error message for tracking */}
       {trackingError && !trackingLoading && showMap && (
         <div className="tracking-error-message">
           {trackingError}
+        </div>
+      )}
+
+      {showTrackPopup && trackBusObj && (
+        <div className="tracking-overlay">
+          <div className="tracking-popup-container">
+            <button 
+              className="tracking-popup-close-btn"
+              onClick={() => { setShowTrackPopup(false); setTrackBusObj(null); }}
+              aria-label="Close"
+              disabled={isPopupLoading}
+              style={isPopupLoading ? { opacity: 0.5, pointerEvents: 'none' } : {}}
+            >
+              <i className="fas fa-times"></i>
+            </button>
+            {trackBusObj && (
+              <BusTracking
+                hideDropdown={true}
+                selectedBus={trackBusObj}
+                userLocation={userLocation}
+                setUserLocation={() => { }}
+                onDrawingRoutes={setIsPopupLoading}
+              />
+            )}
+          </div>
         </div>
       )}
     </div>

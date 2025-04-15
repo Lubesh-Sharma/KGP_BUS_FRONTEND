@@ -790,13 +790,13 @@ button[class*="delete"]:hover {
 }
 
 .status-active {
-  background-color: var(--success);
-  color: white;
-  padding: 5px 10px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  display: inline-block;
+  /* background-color: var(--success); */
+  /* color: white; */
+  /* padding: 5px 10px; */
+  /* border-radius: 20px; */
+  /* font-size: 0.9rem; */
+  /* font-weight: 500; */
+  /* display: inline-block; */
 }
 
 .status-inactive {

@@ -3,7 +3,8 @@ import axios from 'axios';
 axios.defaults.withCredentials = true;
 
 // Base URL based on environment
-const API_BASE_URL = process.env.REACT_APP_API_URL;
+const API_BASE_URL = process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_URL;
+
 // Define API endpoints
 const apiConfig = {
   endpoints: {
@@ -56,6 +57,8 @@ const apiConfig = {
     adminUpdateUser: (id) => `/admin/users/${id}`, // Matches the PUT /admin/users/:id endpoint
     adminDeleteUser: (id) => `/admin/users/${id}`, // Matches the DELETE /admin/users/:id endpoint
 
+    // Fix the bus location endpoint path - remove the /api prefix
+    adminBusLocation: (busId) => `/admin/buses/${busId}/location`,
   }
 };
 
@@ -84,4 +87,7 @@ export const callApi = async (endpoint, options = {}) => {
   }
 };
 
+
+
 export default apiConfig;
+

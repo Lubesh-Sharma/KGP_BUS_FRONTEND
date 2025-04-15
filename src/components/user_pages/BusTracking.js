@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap, Polyline } from 'react-leaflet';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
@@ -36,7 +36,7 @@ function configureRoutingMachine() {
   if (typeof L !== 'undefined' && L.Routing) {
     // Modify the global routing options
     L.Routing.Itinerary.prototype.options.createGeocoderPane = false;
-    L.Routing.timeout = 10 * 1000; // 10 seconds timeout
+    L.Routing.timeout = 60 * 1000; // 60 seconds timeout (increased from 10 seconds)
 
     // Override the error handling globally
     if (L.Routing.ErrorControl && L.Routing.ErrorControl.prototype) {
@@ -68,13 +68,20 @@ function configureRoutingMachine() {
         }
       };
     }
+
+    // Add global routing control tracker similar to BusStopSearch.js approach
+    if (!window.L.Routing._routingControls) {
+      window.L.Routing._routingControls = [];
+    }
   }
 }
 
-// Component to handle routing between points
-const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, setIsPathLoading }) => {
+// Component to handle routing between points - Improved with approach from BusStopSearch.js
+const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, onControlReady }) => {
   const map = useMap();
   const routingControlRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const routeLayerRef = useRef(null);
 
   useEffect(() => {
     if (!startPoint || !endPoint) return;
@@ -82,21 +89,55 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
     // Configure routing machine when component mounts
     configureRoutingMachine();
 
-    // Indicate loading has started
-    setIsPathLoading(true);
+    // Clean up function to handle all cleanup tasks
+    const cleanup = () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
 
-    // Clear previous routing if it exists and ensure it is attached to the map
-    if (routingControlRef.current && map && map.hasLayer(routingControlRef.current)) {
-      map.removeControl(routingControlRef.current);
-      routingControlRef.current = null;
-    }
+      // Proper cleanup for routing control
+      if (routingControlRef.current) {
+        try {
+          // Remove from global tracking if it exists
+          if (window.L.Routing && window.L.Routing._routingControls) {
+            const idx = window.L.Routing._routingControls.indexOf(routingControlRef.current);
+            if (idx >= 0) window.L.Routing._routingControls.splice(idx, 1);
+          }
+
+          // Check if this is a routing control
+          if (map.hasLayer(routingControlRef.current)) {
+            map.removeControl(routingControlRef.current);
+          }
+        } catch (err) {
+          console.warn("Error during route control cleanup:", err);
+        }
+        routingControlRef.current = null;
+      }
+
+      // Clean up any route layers we've tracked
+      if (routeLayerRef.current && map.hasLayer(routeLayerRef.current)) {
+        try {
+          map.removeLayer(routeLayerRef.current);
+        } catch (err) {
+          console.warn("Error removing route layer:", err);
+        }
+        routeLayerRef.current = null;
+      }
+    };
+
+    // First perform cleanup to remove any existing routes
+    cleanup();
 
     try {
+      // Create a waypoints array with explicit L.latLng objects
+      const waypoints = [
+        L.latLng(startPoint[0], startPoint[1]),
+        L.latLng(endPoint[0], endPoint[1])
+      ];
+
       const routingControl = L.Routing.control({
-        waypoints: [
-          L.latLng(startPoint[0], startPoint[1]),
-          L.latLng(endPoint[0], endPoint[1])
-        ],
+        waypoints: waypoints,
         routeWhileDragging: false,
         showAlternatives: false,
         addWaypoints: false,
@@ -105,43 +146,72 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
         lineOptions: {
           styles: [{ color, opacity: 0.7, weight }],
           extendToWaypoints: true,
-          missingRouteTolerance: 0
+          missingRouteTolerance: 10 // Increased from 0 to 10 as in BusStopSearch.js
         },
         createMarker: () => null, // No markers from routing
         serviceUrl: 'https://router.project-osrm.org/route/v1' // Explicitly set OSRM service
       });
 
+      // Add to global tracking
+      if (window.L.Routing._routingControls) {
+        window.L.Routing._routingControls.push(routingControl);
+      }
+
       // Add listeners to handle loading state
-      routingControl.on('routesfound', () => {
-        setTimeout(() => setIsPathLoading(false), 300); // Short delay to ensure UI is updated
+      routingControl.on('routesfound', (e) => {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        // Try to store reference to the route layer
+        if (e.routes && e.routes.length > 0) {
+          // Keep reference to the actual route layer for easier cleanup
+          setTimeout(() => {
+            map.eachLayer(layer => {
+              if (layer._route && !routeLayerRef.current) {
+                routeLayerRef.current = layer;
+              }
+            });
+          }, 100);
+        }
       });
 
-      routingControl.on('routingerror', () => {
-        console.warn("Routing error occurred");
-        setIsPathLoading(false);
+      routingControl.on('routingerror', (e) => {
+        console.warn("Routing error occurred:", e);
       });
 
-      routingControl.addTo(map);
+      // Store the reference for cleanup
       routingControlRef.current = routingControl;
 
-      // Add a timeout in case routing takes too long
-      const timeout = setTimeout(() => {
-        setIsPathLoading(false);
-      }, 10000); // 10 second timeout
-
-      return () => {
-        clearTimeout(timeout);
-        // Cleanup: remove the control if it exists on the map
-        if (routingControlRef.current && map && map.hasLayer(routingControlRef.current)) {
-          map.removeControl(routingControlRef.current);
+      // Add to map - with delay to ensure proper initialization
+      setTimeout(() => {
+        try {
+          if (map && routingControlRef.current) {
+            routingControlRef.current.addTo(map);
+            // Notify parent component if callback provided
+            if (onControlReady) {
+              onControlReady(routingControlRef.current);
+            }
+          }
+        } catch (err) {
+          console.error("Error adding routing control to map:", err);
         }
-        setIsPathLoading(false);
-      };
+      }, 100);
+
+      // Set timeout for OSRM - increased to match BusStopSearch.js approach
+      timeoutRef.current = setTimeout(() => {
+        console.warn("OSRM routing timed out after 30 seconds");
+        cleanup(); // Clean up routing control and stop loading
+      }, 30000); // 30 second timeout
+
+      return cleanup;
+
     } catch (error) {
       console.error("Error setting up routing:", error);
-      setIsPathLoading(false);
+      return cleanup;
     }
-  }, [map, startPoint, endPoint, color, weight, setIsPathLoading]);
+  }, [map, startPoint, endPoint, color, weight, onControlReady]);
 
   return null;
 };
@@ -195,12 +265,45 @@ const LocationButton = ({ setUserLocation }) => {
   );
 };
 
-const BusTracking = ({ userLocation, setUserLocation }) => {
+const BusStopMarker = ({ position, stop, onMarkerReady }) => {
+  const markerRef = useRef(null);
+
+  useEffect(() => {
+    // Notify parent component about the created marker
+    if (markerRef.current && onMarkerReady) {
+      onMarkerReady(markerRef.current);
+    }
+
+    return () => {
+      // No need to manually remove, React will handle this
+    };
+  }, [onMarkerReady]);
+
+  return (
+    <Marker
+      ref={markerRef}
+      position={position}
+      icon={busStopIcon}
+    >
+      <Popup>
+        <div className="stop-popup">
+          <h3>{stop.name}</h3>
+          {stop.estimated_time && (
+            <p><strong>ETA:</strong> {stop.estimated_time}</p>
+          )}
+        </div>
+      </Popup>
+    </Marker>
+  );
+};
+
+const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, selectedBus = null, onDrawingRoutes }) => {
   const [buses, setBuses] = useState([]);
-  const [selectedBus, setSelectedBus] = useState(null);
+  const [selectedBusState, setSelectedBusState] = useState(selectedBus);
   const [busLocation, setBusLocation] = useState(null);
   const [busStops, setBusStops] = useState([]);
   const [nextStop, setNextStop] = useState(null);
+  // eslint-disable-next-line no-unused-vars
   const [currentStop, setCurrentStop] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -209,134 +312,457 @@ const BusTracking = ({ userLocation, setUserLocation }) => {
   const [mapCenter, setMapCenter] = useState(userLocation || [22.3190, 87.3091]); // Default to IIT KGP
   const [isInitialLoad, setIsInitialLoad] = useState(true);
   const intervalRef = useRef(null);
+  const [isDrawingRoutes, setIsDrawingRoutes] = useState(false); // Add this state for route drawing overlay
 
   // State for the custom dropdown
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef(null);
-  const [isPathLoading, setIsPathLoading] = useState(false);
 
-  // Fetch list of buses on mount
-  useEffect(() => {
-    fetchBuses();
-  }, []);
+  // States for bus status and map handling
+  const [busInService, setBusInService] = useState(true);
+  const [busRunning, setBusRunning] = useState(false);
+  const [routesDrawn, setRoutesDrawn] = useState(false);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setIsDropdownOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, []);
+  // Refs to store route data for persistence
+  const routeDataRef = useRef(null);
+  const mapInstance = useRef(null);
 
-  // Clean up interval on unmount
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, []);
+  // Add reference for bus marker to update position smoothly
+  const busMarkerRef = useRef(null);
 
-  // Fetch bus data when selection changes
-  useEffect(() => {
-    if (selectedBus) {
-      fetchBusData(selectedBus.id);
-      setIsInitialLoad(false);
-      intervalRef.current = setInterval(() => {
-        fetchBusData(selectedBus.id, false);
-      }, 15000); // Refresh every 15 seconds
-    } else {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    }
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
-  }, [selectedBus]);
+  // Add reference to store routing controls and stop markers for proper cleanup
+  const routingControls = useRef([]);
+  const stopMarkers = useRef([]);
 
-  const fetchBuses = async () => {
+  // Add state for tracking currently selected stop route
+  const [trackedStopId, setTrackedStopId] = useState(null);
+  // eslint-disable-next-line no-unused-vars
+  const [userToStopRoute, setUserToStopRoute] = useState(null);
+
+  // Ref for user-to-stop routing control
+  const userToStopRoutingRef = useRef(null);
+
+  // Add isMountedRef to prevent state updates after unmounting
+  const isMountedRef = useRef(true);
+
+  // Function to update only bus location without affecting other data
+  const updateBusLocationOnly = async (busId) => {
     try {
-      setLoading(true);
-      const response = await api.get('/buses/getAllBuses');
-      if (response.data && response.data.data) {
-        setBuses(response.data.data);
+      const locationResponse = await api.get(`/buses/${busId}/locationOnly`);
+      if (locationResponse.data && locationResponse.data.data) {
+        const location = locationResponse.data.data;
+        const newLocation = [parseFloat(location.latitude), parseFloat(location.longitude)];
+
+        // Update bus location
+        setBusLocation(newLocation);
+
+        // Update last updated time
+        setLastUpdated(new Date(location.timestamp));
+
+        // Check if bus is running (has recent location data)
+        const locationTime = new Date(location.timestamp);
+        const now = new Date();
+        const timeDiff = (now - locationTime) / (1000 * 60); // difference in minutes
+
+        // If location data is less than 30 minutes old, consider the bus as running
+        setBusRunning(timeDiff < 30);
+
+        // If the marker reference exists, update its position smoothly
+        if (busMarkerRef.current && busMarkerRef.current.leafletElement) {
+          busMarkerRef.current.leafletElement.setLatLng(newLocation);
+        }
       }
-      setLoading(false);
     } catch (err) {
-      console.error('Error fetching buses:', err);
-      setError('Failed to load buses. Please try again later.');
-      setLoading(false);
+      console.warn('Error updating bus location:', err);
+      // Don't set error state to avoid disrupting the UI
+      // Just silently fail and try again on next interval
     }
   };
 
-  const fetchBusData = async (busId, showLoading = true) => {
+  // Function to safely clear the user-to-stop route
+  const clearUserToStopRoute = () => {
+    if (mapInstance.current && userToStopRoutingRef.current) {
+      try {
+        mapInstance.current.removeControl(userToStopRoutingRef.current);
+        userToStopRoutingRef.current = null;
+        setTrackedStopId(null);
+        setUserToStopRoute(null);
+      } catch (err) {
+        console.warn("Error clearing user-to-stop route:", err);
+      }
+    }
+  };
+
+  // Function to safely clear the map of all routes and markers
+  const clearMap = useCallback(() => {
+    // Clear the user-to-stop route if it exists
+    clearUserToStopRoute();
+
+    // Only attempt to clear if map is initialized
+    if (mapInstance.current) {
+      const map = mapInstance.current;
+
+      // Safely remove all routing controls
+      if (routingControls.current && routingControls.current.length > 0) {
+        routingControls.current.forEach(control => {
+          try {
+            if (control) {
+              map.removeControl(control);
+            }
+          } catch (err) {
+            console.warn("Error clearing routing control:", err);
+          }
+        });
+        routingControls.current = [];
+      }
+
+      // Clear all stop markers - this happens automatically with React state
+      // Just reset the ref array
+      stopMarkers.current = [];
+    }
+  }, []);
+
+  const clearPreviousData = () => {
+    // Clear all map routes and markers first
+    clearMap();
+
+    // Clear all previous data
+    setBusLocation(null);
+    setBusStops([]);
+    setNextStop(null);
+    setCurrentStop(null);
+    setError(null);
+    setLastUpdated(null);
+    setBusInfo(null);
+    setBusInService(true);
+    setBusRunning(false);
+    setRoutesDrawn(false);
+
+    // Clear the interval if it exists
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    // Reset route data
+    routeDataRef.current = null;
+  };
+
+  // Track path to a specific stop
+  const trackPathToStop = (stop) => {
+    // Don't track if user location isn't available
+    if (!userLocation) {
+      alert("Please enable location services to track path to bus stop.");
+      return;
+    }
+
+    // Show the loading overlay while calculating the route
+    setIsDrawingRoutes(true);
+
+    // Clear previous user-to-stop route if it exists
+    clearUserToStopRoute();
+
+    // Set the tracked stop ID
+    setTrackedStopId(stop.id);
+
+    // Create a new routing control from user to stop
     try {
-      if (showLoading) setLoading(true);
+      const stopPosition = [parseFloat(stop.latitude), parseFloat(stop.longitude)];
+
+      // Configure routing machine
+      configureRoutingMachine();
+
+      const routingControl = L.Routing.control({
+        waypoints: [
+          L.latLng(userLocation[0], userLocation[1]),
+          L.latLng(stopPosition[0], stopPosition[1])
+        ],
+        routeWhileDragging: false,
+        showAlternatives: false,
+        addWaypoints: false,
+        fitSelectedRoutes: true,
+        show: false,
+        lineOptions: {
+          styles: [{ color: '#FF5722', opacity: 0.7, weight: 5 }],
+          extendToWaypoints: true,
+          missingRouteTolerance: 10
+        },
+        createMarker: () => null // No markers from routing
+      });
+
+      // Add the routing control to the map
+      routingControl.addTo(mapInstance.current);
+
+      // Store the routing control reference
+      userToStopRoutingRef.current = routingControl;
+
+      // Get the route when it's calculated
+      routingControl.on('routesfound', (e) => {
+        const routes = e.routes;
+        if (routes && routes.length > 0) {
+          setUserToStopRoute(routes[0]);
+          // Hide the loading overlay once the route is drawn
+          setTimeout(() => {
+            setIsDrawingRoutes(false);
+          }, 500);
+        }
+      });
+
+      // Add a timeout to hide the overlay in case routing takes too long or fails
+      setTimeout(() => {
+        setIsDrawingRoutes(false);
+      }, 10000); // 10 second timeout as fallback
+    } catch (error) {
+      console.error("Error setting up user-to-stop routing:", error);
+      alert("Failed to create route to bus stop. Please try again.");
+      setIsDrawingRoutes(false); // Hide loading overlay on error
+    }
+  };
+
+  // Update user-to-stop route when user location changes
+  useEffect(() => {
+    // Only update if we have a tracked stop and user location
+    if (trackedStopId && userLocation && userToStopRoutingRef.current) {
+      const selectedStop = busStops.find(stop => stop.id === trackedStopId);
+
+      if (selectedStop) {
+        try {
+          const stopPosition = [parseFloat(selectedStop.latitude), parseFloat(selectedStop.longitude)];
+
+          // Update the first waypoint (user location)
+          userToStopRoutingRef.current.setWaypoints([
+            L.latLng(userLocation[0], userLocation[1]),
+            L.latLng(stopPosition[0], stopPosition[1])
+          ]);
+        } catch (err) {
+          console.warn("Error updating user-to-stop route:", err);
+        }
+      }
+    }
+  }, [userLocation, trackedStopId, busStops]);
+
+  // Fetch list of buses on mount
+  useEffect(() => {
+    const loadBuses = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/buses/getAllBuses');
+        if (response.data && response.data.data) {
+          setBuses(response.data.data);
+        }
+        setLoading(false);
+      } catch (err) {
+        console.error('Error fetching buses:', err);
+        setError('Failed to load buses. Please try again later.');
+        setLoading(false);
+      }
+    };
+
+    loadBuses();
+  }, []);
+
+  // Reference callback for map
+  const setMapRef = (map) => {
+    if (map && !mapInstance.current) {
+      mapInstance.current = map;
+    }
+  };
+
+  // Handle bus marker creation
+  const handleBusStopMarkerReady = (marker) => {
+    stopMarkers.current.push(marker);
+  };
+
+  // Handle routing control creation
+  const handleRoutingControlReady = (control) => {
+    routingControls.current.push(control);
+  };
+
+  useEffect(() => {
+    // Set reference for component mounted state
+    return () => {
+      isMountedRef.current = false;
+
+      // Also clean up interval
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
+  // Add clean up of all map resources when component unmounts
+  useEffect(() => {
+    return () => {
+      clearMap();
+    };
+  }, [clearMap]); // Added clearMap as a dependency
+
+  useEffect(() => {
+    if (hideDropdown && selectedBus) {
+      setSelectedBusState(selectedBus);
+      // Automatically fetch tracking data for the selected bus
+      clearPreviousData();
+      setIsDrawingRoutes(true);
+      fetchBusData(selectedBus.id);
+    }
+    // eslint-disable-next-line
+  }, [hideDropdown, selectedBus]);
+
+  useEffect(() => {
+    if (typeof onDrawingRoutes === 'function') {
+      if (!isDrawingRoutes) {
+        // Add 3s delay before signaling loading is done
+        const timeout = setTimeout(() => onDrawingRoutes(false), 1000);
+        return () => clearTimeout(timeout);
+      } else {
+        onDrawingRoutes(true);
+      }
+    }
+  }, [isDrawingRoutes, onDrawingRoutes]);
+
+  const fetchBusData = async (busId, showLoading = true, refreshDataOnly = false) => {
+    try {
+      if (showLoading && !refreshDataOnly) {
+        setLoading(true);
+        clearPreviousData();
+        setIsDrawingRoutes(true); // Show route loading overlay
+      }
       setError(null);
 
-      // Fetch bus location remains the same
+      // First, try to fetch bus info to get the driver details
+      const infoResponse = await api.get(`/buses/${busId}/info`);
+      if (infoResponse.data && infoResponse.data.data) {
+        setBusInfo(infoResponse.data.data);
+      } else {
+        if (!refreshDataOnly) setBusInfo(null);
+      }
+
+      // Fetch bus location
       const locationResponse = await api.get(`/buses/${busId}/location`);
       if (locationResponse.data && locationResponse.data.data) {
         const location = locationResponse.data.data;
         setBusLocation([parseFloat(location.latitude), parseFloat(location.longitude)]);
         setLastUpdated(new Date(location.timestamp));
-        if (isInitialLoad || !busLocation) {
+
+        // If this is the initial load or the first refresh after clicking Find
+        if ((isInitialLoad || !busLocation) && !refreshDataOnly) {
           setMapCenter([parseFloat(location.latitude), parseFloat(location.longitude)]);
         }
+
+        setBusInService(true);
+
+        // Check if bus is running (has recent location data)
+        const locationTime = new Date(location.timestamp);
+        const now = new Date();
+        const timeDiff = (now - locationTime) / (1000 * 60); // difference in minutes
+
+        // If location data is less than 30 minutes old, consider the bus as running
+        setBusRunning(timeDiff < 30);
       } else {
-        setBusLocation(null);
+        if (!refreshDataOnly) setBusLocation(null);
+        setBusInService(false);
+        setBusRunning(false);
       }
 
-      // Now fetch the route with stops using the new endpoint
-      const routeResponse = await api.get(`/abusroute/${busId}/route-with-stops`);
-      if (routeResponse.data && routeResponse.data.data) {
-        const routeData = routeResponse.data.data;
+      // Now fetch the route with stops if not just refreshing data
+      if (!refreshDataOnly || !routeDataRef.current) {
+        const routeResponse = await api.get(`/buses/${busId}/route`);
+        if (routeResponse.data && routeResponse.data.data) {
+          const routeData = routeResponse.data.data;
+          routeDataRef.current = routeData;
 
-        // Ensure each stop has estimated_time property
-        const stops = routeData.stops.map(stop => {
-          // If the API already provides time information, keep it
-          if (stop.estimated_time !== undefined) {
-            return stop;
+          // Process stop data with new ETA information
+          const stops = routeData.stops.map((stop) => {
+            let status = 'remaining'; // Default status (blue)
+
+            // If we have current stop info, mark stops as cleared or next
+            if (routeData.currentStop) {
+              if (stop.stop_order <= routeData.currentStop.stop_order) {
+                status = 'cleared'; // Green
+              } else if (stop.stop_order === routeData.currentStop.stop_order + 1) {
+                status = 'next'; // Red (next stop)
+              }
+            }
+
+            // Use the ETA data from backend
+            let estimatedTime = '';
+            if (stop.eta_time) {
+              if (stop.eta_time === "Passed") {
+                estimatedTime = "Passed";
+              } else if (stop.eta_minutes > 0) {
+                estimatedTime = `${stop.eta_time} (${stop.eta_minutes} min)`;
+              } else {
+                estimatedTime = stop.eta_time;
+              }
+            }
+
+            return {
+              ...stop,
+              status,
+              estimated_time: estimatedTime
+            };
+          });
+
+          setBusStops(stops);
+          if (routeData.currentStop) setCurrentStop(routeData.currentStop);
+          if (routeData.nextStop) setNextStop(routeData.nextStop);
+        }
+      } else if (refreshDataOnly && busInfo?.estimatedArrival) {
+        // If we're just refreshing data but don't have new route info,
+        // we'll just update the next stop ETA with the bus info data
+        const updatedStops = busStops.map(stop => {
+          if (stop.status === 'next') {
+            return {
+              ...stop,
+              estimated_time: `${stop.eta_time || ''} (${busInfo.estimatedArrival} min)`
+            };
           }
-
-          // If next stop has estimated arrival from busInfo, use that for the next stop
-          if (routeData.nextStop && routeData.nextStop.id === stop.id &&
-            busInfo && busInfo.estimatedArrival) {
-            return { ...stop, estimated_time: busInfo.estimatedArrival + ' min' };
-          }
-
-          // For other stops, calculate an estimated time based on stop order if possible
-          // This is a placeholder - your backend should ideally provide this data
           return stop;
         });
-
-        setBusStops(stops);
-        if (routeData.currentStop) setCurrentStop(routeData.currentStop);
-        if (routeData.nextStop) setNextStop(routeData.nextStop);
+        setBusStops(updatedStops);
       }
 
-      // Fetch bus info remains the same
-      const infoResponse = await api.get(`/buses/${busId}/info`);
-      if (infoResponse.data && infoResponse.data.data) {
-        setBusInfo(infoResponse.data.data);
+      // Set up the interval to refresh data if it doesn't exist already
+      if (busInService && !intervalRef.current) {
+        intervalRef.current = setInterval(() => {
+          if (routesDrawn) {
+            // If routes are already drawn, just update location
+            updateBusLocationOnly(busId);
+          } else {
+            // Otherwise do a full refresh but don't re-render the UI
+            fetchBusData(busId, false, true);
+          }
+        }, 10000); // Refresh every 10 seconds
       }
 
-      if (showLoading) setLoading(false);
+      if (showLoading && !refreshDataOnly) {
+        setLoading(false);
+
+        // Set a small timeout before drawing routes to ensure the DOM is ready
+        setTimeout(() => {
+          setRoutesDrawn(true);
+          // Hide the loading overlay after routes are drawn (add 1s delay)
+          setTimeout(() => {
+            setIsDrawingRoutes(false);
+          }, 1000);
+        }, 3000); // Increased timeout to give more time for routes to draw
+      }
+      setIsInitialLoad(false);
     } catch (err) {
       console.error('Error fetching bus data:', err);
-      setError('Failed to load bus data. Please try again.');
-      if (showLoading) setLoading(false);
+      if (!refreshDataOnly) {
+        setError('Failed to load bus data. Please try again.');
+        setBusInService(false);
+        setBusRunning(false);
+      }
+      if (showLoading && !refreshDataOnly) {
+        setLoading(false);
+        setIsDrawingRoutes(false); // Hide loading overlay on error
+      }
     }
   };
+
   // Filter buses based on search query
   const filteredBuses = buses.filter(bus =>
     bus.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -344,155 +770,153 @@ const BusTracking = ({ userLocation, setUserLocation }) => {
 
   // Handle selecting a bus from the dropdown
   const handleBusSelect = (bus) => {
-    setSelectedBus(bus);
+    setSelectedBusState(bus);
     setSearchQuery(bus.name);
     setIsDropdownOpen(false);
     setError(null);
   };
 
-  // Prepare polyline coordinates for stops
-  const getPolylineCoordinates = () => {
-    if (!busStops || busStops.length === 0) return null;
-    // Ensure stops are sorted by stop_order
-    const sortedStops = [...busStops].sort((a, b) => a.stop_order - b.stop_order);
-    return sortedStops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)]);
-  };
-
-  // Create cleared and remaining routes
-  const getRoutePolylines = () => {
-    if (!busStops || busStops.length === 0) return { cleared: null, remaining: null };
-    const sortedStops = [...busStops].sort((a, b) => a.stop_order - b.stop_order);
-    const clearedStops = sortedStops.filter(stop => stop.cleared);
-    const remainingStops = sortedStops.filter(stop => !stop.cleared);
-
-    // For remaining route, if there are cleared stops, include the last cleared stop as starting point
-    let remainingPoints = remainingStops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)]);
-    if (clearedStops.length > 0 && remainingPoints.length > 0) {
-      const lastCleared = clearedStops[clearedStops.length - 1];
-      remainingPoints = [[parseFloat(lastCleared.latitude), parseFloat(lastCleared.longitude)], ...remainingPoints];
-    }
-
-    const clearedPoints = clearedStops.map(stop => [parseFloat(stop.latitude), parseFloat(stop.longitude)]);
-
-    return {
-      cleared: clearedPoints.length > 1 ? clearedPoints : null,
-      remaining: remainingPoints.length > 1 ? remainingPoints : null
-    };
-  };
-
-  const { cleared, remaining } = getRoutePolylines();
-
   return (
     <div className="bus-tracking">
-      {/* Full-page loading overlay for OSRM loading */}
-      {isPathLoading && (
-        <div className="full-page-loading-overlay">
+      {/* Add the route loading overlay */}
+      {isDrawingRoutes && (
+        <div className="route-loading-overlay">
           <div className="spinner"></div>
-          <div>Loading routes. Please wait...</div>
+          <h3>Loading Bus Route</h3>
         </div>
       )}
 
       <div className="location-panel">
         <h2>Track a BUS</h2>
-        <div className="bus-search">
-          <div className="custom-dropdown" ref={dropdownRef}>
-            <div className="dropdown-header" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsDropdownOpen(true);
-                }}
-                placeholder="Search for a bus..."
-                className="dropdown-search"
-                onClick={(e) => { e.stopPropagation(); setIsDropdownOpen(true); }}
-              />
-              <div className="dropdown-icon">
-                <i className={`fa fa-chevron-${isDropdownOpen ? 'up' : 'down'}`}></i>
+        {!hideDropdown && (
+          <div className="bus-search">
+            <div className="custom-dropdown" ref={dropdownRef}>
+              <div className="dropdown-header" onClick={() => setIsDropdownOpen(!isDropdownOpen)}>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setIsDropdownOpen(true);
+                  }}
+                  placeholder="Search for a bus..."
+                  className="dropdown-search"
+                  onClick={(e) => { e.stopPropagation(); setIsDropdownOpen(true); }}
+                />
+                <div className="dropdown-icon">
+                  <i className={`fa fa-chevron-${isDropdownOpen ? 'up' : 'down'}`}></i>
+                </div>
               </div>
+              {isDropdownOpen && (
+                <ul className="dropdown-list">
+                  {filteredBuses.length > 0 ? (
+                    filteredBuses.map(bus => (
+                      <li
+                        key={bus.id}
+                        onClick={() => handleBusSelect(bus)}
+                        className={selectedBusState && selectedBusState.id === bus.id ? 'selected' : ''}
+                      >
+                        {bus.name}
+                      </li>
+                    ))
+                  ) : (
+                    <li className="no-results">No buses found</li>
+                  )}
+                </ul>
+              )}
             </div>
-            {isDropdownOpen && (
-              <ul className="dropdown-list">
-                {filteredBuses.length > 0 ? (
-                  filteredBuses.map(bus => (
-                    <li
-                      key={bus.id}
-                      onClick={() => handleBusSelect(bus)}
-                      className={selectedBus && selectedBus.id === bus.id ? 'selected' : ''}
-                    >
-                      {bus.name}
-                    </li>
-                  ))
-                ) : (
-                  <li className="no-results">No buses found</li>
-                )}
-              </ul>
+            <button
+              className="track-bus-btn"
+              onClick={() => {
+                if (selectedBusState) {
+                  // Explicitly clear the map before fetching new data
+                  clearPreviousData();
+                  // Show the loading overlay before fetching bus data
+                  setIsDrawingRoutes(true);
+                  fetchBusData(selectedBusState.id);
+                }
+              }}
+              disabled={!selectedBusState || loading}
+            >
+              {loading ? 'Loading...' : 'Find'}
+            </button>
+          </div>
+        )}
+
+        {error && <div className="error-message">{error}</div>}
+
+        {/* Bus driver information */}
+        {selectedBusState && busInfo && (
+          <div className="bus-driver-info">
+            <h4>Driver Information</h4>
+            {busInfo.driverName ? (
+              <>
+                <p><strong>Name:</strong> {busInfo.driverName}</p>
+                <p><strong>ID:</strong> {busInfo.driver_id || 'N/A'}</p>
+              </>
+            ) : (
+              <p className="no-driver">No driver assigned to this bus.</p>
             )}
           </div>
-          <button
-            className="track-bus-btn"
-            onClick={() => selectedBus && fetchBusData(selectedBus.id)}
-            disabled={!selectedBus || loading}
-          >
-            {loading ? 'Loading...' : 'Track Bus'}
-          </button>
-        </div>
-        {/* New: Display route order with colored text for cleared (green) and remaining (blue) stops */}
-        {/* New: Display route order with colored text for cleared (green) and remaining (blue) stops */}
-        {selectedBus && busStops.length > 0 && (
+        )}
+
+        {/* Bus running status */}
+        {selectedBusState && busInService && (
+          <div className={`bus-running-status ${busRunning ? 'running' : 'not-running'}`}>
+            <p>
+              <span className="status-indicator"></span>
+              {busRunning
+                ? 'This bus is currently running and tracking is active.'
+                : 'This bus is in service but not currently tracking.'}
+            </p>
+          </div>
+        )}
+
+        {/* Bus not in service message */}
+        {selectedBusState && !busInService && (
+          <div className="bus-status-message">
+            <p className="error-message">This bus is currently out of service.</p>
+          </div>
+        )}
+
+        {/* Route stops with ordered list and color-coding */}
+        {selectedBusState && busStops.length > 0 && (
           <div className="bus-stop-order">
-            <h4>Route Order</h4>
-            <ul>
+            <h4>Route Stops</h4>
+            <ul className="colored-stops-list">
               {[...busStops]
                 .sort((a, b) => a.stop_order - b.stop_order)
                 .map(stop => (
-                  <li key={stop.id} style={{ color: stop.cleared ? '#00ff00' : '#0000ff' }}>
-                    {stop.stop_order}. {stop.name}
-                    {stop.estimated_time && (
-                      <span className="stop-time"> - {stop.estimated_time}</span>
-                    )}
+                  <li
+                    key={stop.id}
+                    className={`stop-item ${stop.status} ${trackedStopId === stop.id ? 'tracked' : ''}`}
+                  >
+                    <div className="stop-info">
+                      <span className="stop-name"> {stop.name}</span>
+                      {stop.estimated_time && (
+                        <span className="stop-time">{stop.estimated_time}</span>
+                      )}
+                    </div>
+                    <button
+                      className="track-stop-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        trackPathToStop(stop);
+                      }}
+                      title="Track path to this stop"
+                    >
+                      {trackedStopId === stop.id ? 'Tracking' : 'Track'}
+                    </button>
                   </li>
                 ))
               }
             </ul>
           </div>
         )}
-        {error && <div className="error-message">{error}</div>}
-        {selectedBus && !busLocation && (
-          <div className="selected-bus-info">
-            <h4>{selectedBus.name}</h4>
-            <div className="bus-status not-active">
-              <p>This bus is currently not in service.</p>
-            </div>
-          </div>
-        )}
-        {selectedBus && busLocation && (
-          <div className="selected-bus-info">
-            <h4>{selectedBus.name}</h4>
-            <div className="bus-status active">
-              <p><strong>Status:</strong> Active</p>
-              <p><strong>Last Updated:</strong> {lastUpdated ? lastUpdated.toLocaleTimeString() : 'N/A'}</p>
-              {busInfo && (
-                <>
-                  <p><strong>Driver:</strong> {busInfo.driverName || 'Not assigned'}</p>
-                  {currentStop && <p><strong>Last Stop:</strong> {currentStop.name}</p>}
-                  {nextStop && (
-                    <>
-                      <p><strong>Next Stop:</strong> {nextStop.name}</p>
-                      {busInfo.estimatedArrival && (
-                        <p><strong>ETA:</strong> {busInfo.estimatedArrival} min</p>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        )}
-        {!selectedBus && (
+
+        {!selectedBusState && (
           <div className="initial-message">
-            <p>Please select a bus from the dropdown above to track its location.</p>
+            <p>Please select a bus from the dropdown above and click Find to track its location.</p>
           </div>
         )}
       </div>
@@ -502,6 +926,7 @@ const BusTracking = ({ userLocation, setUserLocation }) => {
           center={userLocation || [22.3190, 87.3091]}
           zoom={15}
           style={{ height: "100%", width: "100%" }}
+          ref={setMapRef}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -513,14 +938,18 @@ const BusTracking = ({ userLocation, setUserLocation }) => {
               <Popup>Your location</Popup>
             </Marker>
           )}
-          {(selectedBus && busLocation) && (
+          {(selectedBusState && busLocation) && (
             <MapViewController center={mapCenter} busLocation={busLocation} />
           )}
-          {(selectedBus && busLocation) && (
-            <Marker position={busLocation} icon={busIcon}>
+          {(selectedBusState && busLocation) && (
+            <Marker
+              position={busLocation}
+              icon={busIcon}
+              ref={busMarkerRef}
+            >
               <Popup>
                 <div className="bus-popup">
-                  <h3>{selectedBus.name}</h3>
+                  <h3>{selectedBusState.name}</h3>
                   {busInfo && (
                     <>
                       <p><strong>Driver:</strong> {busInfo.driverName || 'Not assigned'}</p>
@@ -535,80 +964,68 @@ const BusTracking = ({ userLocation, setUserLocation }) => {
             </Marker>
           )}
 
-          {/* Render markers for ALL bus stops */}
-          {selectedBus && busStops.length > 0 && (
+          {/* Render markers for bus stops with ETA in popup using the component with ref tracking */}
+          {selectedBusState && busStops.length > 0 && (
             busStops.map(stop => (
-              <Marker key={stop.id} position={[parseFloat(stop.latitude), parseFloat(stop.longitude)]} icon={busStopIcon}>
-                <Popup>
-                  <div className="stop-popup">
-                    <h3>{stop.name}</h3>
-                    <p>Stop Order: {stop.stop_order}</p>
-                    <p>estimated_time: {stop.estimated_time}</p>
-                  </div>
-                </Popup>
-              </Marker>
+              <BusStopMarker
+                key={stop.id}
+                position={[parseFloat(stop.latitude), parseFloat(stop.longitude)]}
+                stop={stop}
+                onMarkerReady={handleBusStopMarkerReady}
+              />
             ))
           )}
 
-          {/* Render actual route lines between adjacent bus stops using RoutingControl */}
-          {selectedBus && busStops.length > 1 && (
-            <>
-              {[...busStops]
-                .sort((a, b) => a.stop_order - b.stop_order)
-                .map((stop, idx, arr) => {
-                  if (idx < arr.length - 1) {
-                    return (
-                      <RoutingControl
-                        key={`${stop.id}-${arr[idx + 1].id}`}
-                        startPoint={[parseFloat(stop.latitude), parseFloat(stop.longitude)]}
-                        endPoint={[parseFloat(arr[idx + 1].latitude), parseFloat(arr[idx + 1].longitude)]}
-                        color="#3388ff"
-                        weight={4}
-                        setIsPathLoading={setIsPathLoading}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-            </>
+          {/* Draw full route using Routing Machine */}
+          {selectedBusState && busStops.length > 2 && routesDrawn && (
+            [...busStops]
+              .sort((a, b) => a.stop_order - b.stop_order)
+              .map((stop, idx, arr) => {
+                // Make sure we're not on the last stop when drawing connections
+                if (idx < arr.length - 1) {
+                  return (
+                    <RoutingControl
+                      key={`route-${stop.id}-to-${arr[idx + 1].id}`}
+                      startPoint={[parseFloat(stop.latitude), parseFloat(stop.longitude)]}
+                      endPoint={[parseFloat(arr[idx + 1].latitude), parseFloat(arr[idx + 1].longitude)]}
+                      color="#90CAF9"
+                      weight={4}
+                      onControlReady={handleRoutingControlReady}
+                    />
+                  );
+                }
+                return null;
+              })
           )}
-
-          {/* Route from user to next stop */}
-          {(selectedBus && userLocation && nextStop) && (
-            <RoutingControl
-              startPoint={userLocation}
-              endPoint={[parseFloat(nextStop.latitude), parseFloat(nextStop.longitude)]}
-              color="#ff6b6b"
-              weight={3}
-              setIsPathLoading={setIsPathLoading}
-            />
-          )}
-
         </MapContainer>
 
-        {(selectedBus && busLocation && nextStop) && (
+        {(selectedBusState && busLocation && busStops.length > 0) && (
           <div className="map-legend">
             <div className="legend-item">
-              <div className="legend-icon" style={{ backgroundColor: '#3388ff' }}></div>
-              <span>Bus Route to Next Stop</span>
+              <div className="legend-icon" style={{ backgroundColor: '#90CAF9' }}></div>
+              <span>Bus Route</span>
             </div>
-            {userLocation && (
+            {trackedStopId && (
               <div className="legend-item">
-                <div className="legend-icon" style={{ backgroundColor: '#ff6b6b' }}></div>
-                <span>Your Path to Next Stop</span>
+                <div className="legend-icon" style={{ backgroundColor: '#FF5722' }}></div>
+                <span>Your Path to Stop</span>
               </div>
             )}
             <div className="legend-item">
-              <div className="legend-icon" style={{ backgroundColor: '#00ff00' }}></div>
+              <div className="legend-icon bus-stop-icon cleared"></div>
               <span>Cleared Stops</span>
             </div>
             <div className="legend-item">
-              <div className="legend-icon" style={{ backgroundColor: '#0000ff' }}></div>
+              <div className="legend-icon bus-stop-icon next"></div>
+              <span>Next Stop</span>
+            </div>
+            <div className="legend-item">
+              <div className="legend-icon bus-stop-icon remaining"></div>
               <span>Remaining Stops</span>
             </div>
           </div>
         )}
-        {!selectedBus && (
+        {!selectedBusState && (
           <div className="map-instructions-overlay">
             <p>Select a bus from the left panel to see its location and route</p>
           </div>

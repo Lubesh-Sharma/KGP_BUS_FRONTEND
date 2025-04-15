@@ -103,7 +103,7 @@ function App() {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         // Log minimal information, avoid logging full user details
-        //console.log("User loaded from localStorage (ID):", parsedUser.id);
+        ////console.log("User loaded from localStorage (ID):", parsedUser.id);
       } catch (error) {
         console.error("Error parsing user data from localStorage");
         localStorage.removeItem('user');
@@ -125,7 +125,7 @@ function App() {
             setUser(response.data.user);
             localStorage.setItem('user', JSON.stringify(response.data.user));
             // Log minimal information
-            //console.log("User authenticated (ID):", response.data.user.id);
+            ////console.log("User authenticated (ID):", response.data.user.id);
           }
         } catch (error) {
           console.error("Token verification failed:", error);

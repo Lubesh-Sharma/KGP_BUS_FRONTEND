@@ -130,26 +130,47 @@ function BusManagement({ user }) {
   };
 
   const handleDeleteBus = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this bus? This will also remove it from any routes it is assigned to.')) return;
+    // Improved confirmation message with warning about related data
+    if (!window.confirm('Are you sure you want to delete this bus? This will also remove all related data including routes, start times, driver assignments, and location history.')) return;
     
     try {
-      setError('');
-      setLoading(true);
-      //console.log("Deleting bus:", id);
-      
-      await axios.delete(
-        getApiUrl(api.endpoints.adminDeleteBus(id)),
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
-      
-      //console.log("Bus deleted successfully");
-      // Refresh to get latest data
-      setRefreshTrigger(prev => prev + 1);
+        setError('');
+        setLoading(true);
+        console.log("Deleting bus:", id);
+        
+        const response = await axios.delete(
+            getApiUrl(api.endpoints.adminDeleteBus(id)),
+            { headers: { Authorization: `Bearer ${user.token}` } }
+        );
+        
+        console.log("Bus deletion response:", response.data);
+        
+        // Show success message
+        const successMessage = response.data.message || 'Bus deleted successfully';
+        alert(successMessage);
+        
+        // Refresh to get latest data
+        setRefreshTrigger(prev => prev + 1);
     } catch (err) {
-      setError('Failed to delete bus: ' + err.message);
-      console.error("Error in handleDeleteBus:", err);
+        console.error("Error in handleDeleteBus:", err);
+        
+        let errorMessage = "Failed to delete bus";
+        
+        // Check for foreign key constraint violation
+        if (err.response?.data?.message?.includes('foreign key constraint')) {
+            errorMessage = "Cannot delete this bus because it has related schedules or routes. Please delete those first.";
+        } else if (err.response?.data?.message) {
+            // Use the server's error message if available
+            errorMessage = err.response.data.message;
+        } else {
+            // Fall back to generic error with the message
+            errorMessage = 'Failed to delete bus: ' + err.message;
+        }
+        
+        setError(errorMessage);
+        alert(errorMessage); // Show an alert for immediate feedback
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
   };
 

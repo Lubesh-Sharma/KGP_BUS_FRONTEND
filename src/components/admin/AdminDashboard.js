@@ -59,7 +59,7 @@ function AdminDashboard() {
       });
       
       // If we get here, the token is still valid
-      //console.log("Session is still valid");
+      ////console.log("Session is still valid");
     } catch (err) {
       console.error("Session check failed:", err);
       
@@ -78,7 +78,7 @@ function AdminDashboard() {
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
           if (parsedUser.role === 'admin') {
-            //console.log("Admin user found in localStorage:", parsedUser.id);
+            ////console.log("Admin user found in localStorage:", parsedUser.id);
             setUser(parsedUser);
             setLoading(false);
             return;
@@ -106,7 +106,7 @@ function AdminDashboard() {
           // Store user in localStorage for future requests
           localStorage.setItem('user', JSON.stringify(userData));
           setUser(userData);
-          //console.log("Admin user fetched from API:", userData.id);
+          ////console.log("Admin user fetched from API:", userData.id);
         } else {
           throw new Error("Invalid user data received");
         }
@@ -170,7 +170,7 @@ function AdminDashboard() {
   const token = localStorage.getItem('jwtToken');
   
   // Debug token format to help diagnose issues
-  //console.log("Token format check:", {
+  ////console.log("Token format check:", {
   //   exists: !!token,
   //   length: token ? token.length : 0,
   //   // Show only first 10 chars to avoid logging sensitive data

@@ -153,6 +153,10 @@
   margin-right: 8px;
 }
 
+.legend-icon.user-path {
+  background-color: #FF5722;
+}
+
 .no-buses-message {
   color: #757575;
   font-style: italic;
@@ -437,4 +441,290 @@
   border-radius: 8px;
   color: #5f6368;
   font-style: italic;
+}
+
+/* Driver information display */
+.bus-driver-info {
+  margin-top: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bus-driver-info h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #333;
+}
+
+.bus-driver-info p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.no-driver {
+  color: #ff9800;
+  font-style: italic;
+}
+
+/* Bus service status messages */
+.bus-status-message {
+  margin-top: 15px;
+  padding: 10px;
+  border-radius: 5px;
+  background-color: #fff4e5;
+  border-left: 4px solid #ff9800;
+}
+
+/* Color-coded stops list */
+.bus-stop-order {
+  margin-top: 15px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 10px 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.bus-stop-order h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 16px;
+  color: #333;
+}
+
+.colored-stops-list {
+  list-style-type: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+.stop-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 5px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.stop-item.cleared {
+  background-color: rgba(0, 200, 0, 0.1);
+  color: #006400;
+  border-left: 3px solid #00c000;
+}
+
+.stop-item.next {
+  background-color: rgba(255, 0, 0, 0.1);
+  color: #b00000;
+  border-left: 3px solid #ff0000;
+  font-weight: bold;
+}
+
+.stop-item.remaining {
+  background-color: rgba(0, 0, 255, 0.1);
+  color: #000080;
+  border-left: 3px solid #0000ff;
+}
+
+.stop-item.tracked {
+  border: 1px solid #3498db;
+  box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+}
+
+.stop-item.tracked .track-stop-btn {
+  background-color: #27ae60;
+}
+
+.stop-item.tracked .track-stop-btn:hover {
+  background-color: #2ecc71;
+}
+
+.stop-name {
+  flex: 1;
+}
+
+.stop-time {
+  font-weight: bold;
+  min-width: 60px;
+  text-align: right;
+}
+
+.stop-info {
+  flex: 1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.track-stop-btn {
+  background-color: #3498db;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  margin-left: 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s ease;
+  min-width: 60px;
+  text-align: center;
+}
+
+.track-stop-btn:hover {
+  background-color: #2980b9;
+}
+
+/* Bus running status indicator */
+.bus-running-status {
+  margin-top: 15px;
+  margin-bottom: 15px;
+  padding: 10px 15px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  position: relative;
+  background-color: #f8f9fa;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.bus-running-status p {
+  margin: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+}
+
+.bus-running-status.running {
+  border-left: 4px solid #4caf50;
+}
+
+.bus-running-status.not-running {
+  border-left: 4px solid #ff9800;
+}
+
+.status-indicator {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.running .status-indicator {
+  background-color: #4caf50;
+  box-shadow: 0 0 0 rgba(76, 175, 80, 0.4);
+  animation: pulse-green 2s infinite;
+}
+
+.not-running .status-indicator {
+  background-color: #ff9800;
+}
+
+@keyframes pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 10px rgba(76, 175, 80, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(76, 175, 80, 0);
+  }
+}
+
+/* Bus stop icon colors for map legend */
+.bus-stop-icon {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.bus-stop-icon.cleared {
+  background-color: rgba(0, 200, 0, 0.8);
+  border: 2px solid #006400;
+}
+
+.bus-stop-icon.next {
+  background-color: rgba(255, 0, 0, 0.8);
+  border: 2px solid #b00000;
+}
+
+.bus-stop-icon.remaining {
+  background-color: rgba(0, 0, 255, 0.8);
+  border: 2px solid #000080;
+}
+
+/* Loading overlay for route calculations */
+.full-page-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.full-page-loading-overlay .spinner {
+  width: 50px;
+  height: 50px;
+  border: 5px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #3498db;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 20px;
+}
+
+.full-page-loading-overlay div:last-child {
+  font-size: 18px;
+  color: #333;
+  font-weight: 500;
+}
+
+/* Full-screen route loading overlay */
+.route-loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  color: white;
+}
+
+.route-loading-overlay .spinner {
+  width: 70px;
+  height: 70px;
+  border: 8px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #3498db;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 20px;
+}
+
+.route-loading-overlay h3 {
+  font-size: 22px;
+  margin-bottom: 10px;
+}
+
+.route-loading-overlay p {
+  font-size: 16px;
+  text-align: center;
+  max-width: 80%;
 }

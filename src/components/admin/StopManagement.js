@@ -65,7 +65,7 @@ function StopManagement({ user }) {
         if (response.data.length > 0) {
           setMapCenter([response.data[0].latitude, response.data[0].longitude]);
         }
-        //console.log("Bus stops loaded from database:", response.data.length);
+        ////console.log("Bus stops loaded from database:", response.data.length);
       } else {
         throw new Error("Invalid data format received");
       }
@@ -190,7 +190,7 @@ function StopManagement({ user }) {
       );
       
       if (response.data) {
-        //console.log("Stop added successfully:", response.data);
+        ////console.log("Stop added successfully:", response.data);
         setRefreshTrigger(prev => prev + 1);
       } else {
         throw new Error("No data returned");
@@ -219,7 +219,7 @@ function StopManagement({ user }) {
       );
       
       if (response.data) {
-        //console.log("Stop updated successfully:", response.data);
+        ////console.log("Stop updated successfully:", response.data);
         setRefreshTrigger(prev => prev + 1);
       } else {
         throw new Error("No data returned");
@@ -248,7 +248,7 @@ function StopManagement({ user }) {
           { headers: { Authorization: `Bearer ${user.token}` }, withCredentials: true }
         );
         
-        //console.log("Stop deleted successfully");
+        ////console.log("Stop deleted successfully");
         setRefreshTrigger(prev => prev + 1);
       } catch (apiError) {
         setError(`Failed to delete stop: ${apiError.response?.data?.message || apiError.message}`);

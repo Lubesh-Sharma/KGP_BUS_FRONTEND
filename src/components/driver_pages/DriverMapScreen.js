@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { getApiUrl } from '../../utils/api2.js';
 import '../../css/DriverMapScreen.css';
-
 
 axios.defaults.withCredentials = true;
 
@@ -27,7 +26,7 @@ const busIcon = new L.Icon({
 
 // Bus stop icon
 const busStopIcon = new L.Icon({
-  iconUrl: 'https://cdn-icons-png.flaticon.com/512/1165/1165895.png',
+  iconUrl: '/bus-stop.png',
   iconSize: [24, 24],
   iconAnchor: [12, 24],
   popupAnchor: [0, -24]
@@ -35,23 +34,233 @@ const busStopIcon = new L.Icon({
 
 // Next stop icon (highlighted)
 const nextStopIcon = new L.Icon({
-  iconUrl: 'https://cdn-icons-png.flaticon.com/512/1165/1165895.png',
-  iconSize: [36, 36],
-  iconAnchor: [18, 36],
-  popupAnchor: [0, -36],
-  className: 'next-stop-icon' // CSS class for styling
+  iconUrl: '/bus-stop.png',
+  iconSize: [24, 24],
+  iconAnchor: [12, 24],
+  popupAnchor: [0, -24]
 });
 
 // Component to handle map centering
 const MapController = ({ center, zoom }) => {
   const map = useMap();
-  
+
   useEffect(() => {
     if (center) {
       map.setView(center, zoom || map.getZoom());
     }
   }, [center, zoom, map]);
-  
+
+  return null;
+};
+
+// Configure OSRM routing to load faster - similar to BusStopSearch.js approach
+function configureRoutingMachine() {
+  if (typeof L !== 'undefined' && L.Routing) {
+    L.Routing.Itinerary.prototype.options.createGeocoderPane = false;
+    L.Routing.timeout = 30 * 1000;
+
+    if (L.Routing.ErrorControl && L.Routing.ErrorControl.prototype) {
+      L.Routing.ErrorControl.prototype._routingErrorHandler = function (e) {
+        console.warn("Handled routing error:", e);
+      };
+    }
+
+    if (L.Routing.Line && L.Routing.Line.prototype) {
+      const originalClearLines = L.Routing.Line.prototype._clearLines;
+      L.Routing.Line.prototype._clearLines = function () {
+        try {
+          if (this._map && this._route && this._route._layers) {
+            originalClearLines.call(this);
+          }
+        } catch (e) {
+          console.warn("Protected from _clearLines error:", e);
+          if (this._map && this._route) {
+            try {
+              this._map.removeLayer(this._route);
+            } catch (e) {
+              console.warn("Also failed with manual cleanup:", e);
+            }
+          }
+        }
+      };
+    }
+
+    if (!window.L.Routing._routingControls) {
+      window.L.Routing._routingControls = [];
+    }
+  }
+}
+
+// Improved OSRM routes component using BusStopSearch.js approach
+const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopIndex }) => {
+  const map = useMap();
+  const routeRef = useRef(null);
+  // eslint-disable-next-line no-unused-vars
+  const nextSegmentRef = useRef(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const routingControlsRef = useRef([]);
+  const isInitialRenderRef = useRef(true);
+
+  const clearAllRoutingControls = useCallback(() => {
+    if (routingControlsRef.current.length > 0) {
+      routingControlsRef.current.forEach(control => {
+        try {
+          if (map && map.hasLayer(control)) {
+            map.removeControl(control);
+          }
+        } catch (e) {
+          console.warn("Error removing routing control:", e);
+        }
+      });
+      routingControlsRef.current = [];
+    }
+  }, [map]);
+
+  useEffect(() => {
+    configureRoutingMachine();
+
+    return () => {
+      clearAllRoutingControls();
+    };
+  }, [clearAllRoutingControls]);
+
+  useEffect(() => {
+    if (!stops || stops.length < 2 || !map) return;
+
+    if (!isInitialRenderRef.current && routeRef.current) {
+      return;
+    }
+
+    const fetchAndDrawFullRoute = async () => {
+      try {
+        setIsLoading(true);
+
+        clearAllRoutingControls();
+
+        if (routeRef.current) {
+          map.removeLayer(routeRef.current);
+          routeRef.current = null;
+        }
+
+        const waypoints = stops.map(stop => [
+          parseFloat(stop.latitude),
+          parseFloat(stop.longitude)
+        ]).filter(coords => !isNaN(coords[0]) && !isNaN(coords[1]));
+
+        if (waypoints.length < 2) {
+          console.warn("Not enough valid waypoints for route");
+          setIsLoading(false);
+          return;
+        }
+
+        const routingControl = L.Routing.control({
+          waypoints: waypoints.map(coords => L.latLng(coords[0], coords[1])),
+          routeWhileDragging: false,
+          showAlternatives: false,
+          addWaypoints: false,
+          fitSelectedRoutes: false,
+          show: false,
+          lineOptions: {
+            styles: [{ color: '#3388ff', opacity: 0.7, weight: 4 }],
+            extendToWaypoints: true,
+            missingRouteTolerance: 10
+          },
+          createMarker: () => null,
+          serviceUrl: 'https://router.project-osrm.org/route/v1'
+        });
+
+        if (window.L.Routing._routingControls) {
+          window.L.Routing._routingControls.push(routingControl);
+        }
+
+        routingControlsRef.current.push(routingControl);
+
+        routingControl.on('routesfound', (e) => {
+          if (e.routes && e.routes.length > 0) {
+            setIsLoading(false);
+          }
+        });
+
+        routingControl.on('routingerror', (e) => {
+          console.warn("Routing error occurred:", e);
+          setIsLoading(false);
+        });
+
+        setTimeout(() => {
+          if (map && routingControl) {
+            try {
+              routingControl.addTo(map);
+              isInitialRenderRef.current = false;
+            } catch (err) {
+              console.error("Error adding routing control to map:", err);
+              setIsLoading(false);
+            }
+          }
+        }, 100);
+      } catch (error) {
+        console.error('Error setting up full route:', error);
+        setIsLoading(false);
+      }
+    };
+
+    fetchAndDrawFullRoute();
+
+  }, [map, stops, clearAllRoutingControls]);
+
+  return isLoading ? (
+    <div className="osrm-loading-overlay">
+      <div className="osrm-loading-content">
+        <div className="osrm-spinner"></div>
+        <p>Drawing routes...</p>
+      </div>
+    </div>
+  ) : null;
+};
+
+// Improved location tracking with high accuracy
+const DriverLocationTracker = ({ setPosition }) => {
+  const map = useMapEvents({
+    locationfound(e) {
+      setPosition([e.latlng.lat, e.latlng.lng]);
+    },
+    locationerror(e) {
+      console.error('Location error:', e.message);
+      alert('Could not get your location. Please enable location services and reload.');
+    }
+  });
+
+  useEffect(() => {
+    const locationOptions = {
+      watch: true,
+      enableHighAccuracy: true,
+      timeout: 15000,
+      maximumAge: 0
+    };
+
+    map.locate(locationOptions);
+
+    if (navigator.geolocation) {
+      const watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          if (position.coords.accuracy < 100) {
+            setPosition([position.coords.latitude, position.coords.longitude]);
+          }
+        },
+        (error) => console.warn('Fallback geolocation error:', error),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+
+      return () => {
+        map.stopLocate();
+        navigator.geolocation.clearWatch(watchId);
+      };
+    }
+
+    return () => {
+      map.stopLocate();
+    };
+  }, [map, setPosition]);
+
   return null;
 };
 
@@ -75,197 +284,75 @@ const LocationUpdater = ({ driverId, busId, position }) => {
             }
           }
         );
-        //console.log('Location updated successfully');
       } catch (error) {
         console.error('Error updating location:', error);
       }
     };
 
     updateLocation();
-    
-    // Update location every 10 seconds (changed from 5 seconds)
+
     const interval = setInterval(updateLocation, 10000);
-    
+
     return () => clearInterval(interval);
   }, [position, busId, driverId]);
-  
+
   return null;
 };
 
 // Component to detect proximity to next bus stop
-const ProximityDetector = ({ busId, position, nextStop, onStopReached }) => {
+const ProximityDetector = ({ busId, position, nextStop, busInfo, onStopReached }) => {
   useEffect(() => {
-    if (!position || !nextStop || !busId) return;
+    if (!position || !nextStop || !busId || !busInfo) return;
 
     const checkProximity = () => {
       const nextStopPosition = [
         parseFloat(nextStop.latitude),
         parseFloat(nextStop.longitude)
       ];
-      
-      // Calculate distance between driver and next stop (in meters)
+
       const distance = L.latLng(position).distanceTo(L.latLng(nextStopPosition));
-      
-      // If within 30 meters, mark the stop as cleared
-      if (distance <= 30) {
-        //console.log(`Within 30m of next stop (${distance.toFixed(2)}m). Auto-clearing stop.`);
+
+      if (distance <= 30 && nextStop.stop_id === busInfo.nextStop?.stop_id) {
         onStopReached(busId, nextStop.stop_id);
       }
     };
-    
-    // Check proximity every second
+
     const interval = setInterval(checkProximity, 1000);
-    
+
     return () => clearInterval(interval);
-  }, [position, nextStop, busId, onStopReached]);
-  
+  }, [position, nextStop, busId, busInfo, onStopReached]);
+
   return null;
 };
 
-// Component to draw OSRM route between stops
-const OsrmRoutes = ({ stops, currentPosition, lastClearedStopIndex, nextStopIndex }) => {
-  const map = useMap();
-  const routeRef = useRef(null);
-  const nextSegmentRef = useRef(null);
-  const [isLoading, setIsLoading] = useState(false);
-  
-  useEffect(() => {
-    if (!stops || stops.length < 2 || !map) return;
-    
-    const fetchAndDrawFullRoute = async () => {
-      try {
-        setIsLoading(true);
-        
-        // Clear previous route
-        if (routeRef.current) {
-          map.removeLayer(routeRef.current);
-          routeRef.current = null;
-        }
-        
-        // Build waypoints for the complete route
-        const waypoints = stops.map(stop => [
-          parseFloat(stop.longitude), 
-          parseFloat(stop.latitude)
-        ]);
-        
-        // Close the loop for circular route
-        waypoints.push(waypoints[0]);
-        
-        // Convert waypoints to the format expected by OSRM API
-        const waypointsString = waypoints.map(wp => wp.join(',')).join(';');
-        
-        const response = await axios.get(
-          `https://router.project-osrm.org/route/v1/driving/${waypointsString}?overview=full&geometries=geojson`
-        );
-        
-        if (response.data.code === 'Ok' && response.data.routes.length > 0) {
-          const routeGeometry = response.data.routes[0].geometry.coordinates;
-          // OSRM returns coordinates as [lng, lat], we need to flip for Leaflet
-          const coordinates = routeGeometry.map(coord => [coord[1], coord[0]]);
-          
-          // Create a polyline for the full route
-          const polyline = L.polyline(coordinates, {
-            color: '#3388ff',
-            weight: 4,
-            opacity: 0.6,
-            lineJoin: 'round'
-          }).addTo(map);
-          
-          routeRef.current = polyline;
-        }
-      } catch (error) {
-        console.error('Error fetching full route:', error);
-      }
-    };
-    
-    const fetchAndDrawNextSegment = async () => {
-      try {
-        // Clear previous next segment route
-        if (nextSegmentRef.current) {
-          map.removeLayer(nextSegmentRef.current);
-          nextSegmentRef.current = null;
-        }
-        
-        // Only draw if we have a last cleared stop and next stop
-        if (lastClearedStopIndex !== null && nextStopIndex !== null) {
-          const lastClearedStop = stops[lastClearedStopIndex];
-          const nextStop = stops[nextStopIndex];
-          
-          // Build waypoints from last cleared stop to next stop
-          const waypoints = [
-            [parseFloat(lastClearedStop.longitude), parseFloat(lastClearedStop.latitude)], // Last cleared stop [lng, lat]
-            [parseFloat(nextStop.longitude), parseFloat(nextStop.latitude)] // Next stop [lng, lat]
-          ];
-          
-          // Convert waypoints to the format expected by OSRM API
-          const waypointsString = waypoints.map(wp => wp.join(',')).join(';');
-          
-          const response = await axios.get(
-            `https://router.project-osrm.org/route/v1/driving/${waypointsString}?overview=full&geometries=geojson`
-          );
-          
-          if (response.data.code === 'Ok' && response.data.routes.length > 0) {
-            const routeGeometry = response.data.routes[0].geometry.coordinates;
-            // OSRM returns coordinates as [lng, lat], we need to flip for Leaflet
-            const coordinates = routeGeometry.map(coord => [coord[1], coord[0]]);
-            
-            // Create a highlighted polyline for the next segment
-            const polyline = L.polyline(coordinates, {
-              color: '#FF0000', // Red color for the highlighted segment
-              weight: 6,
-              opacity: 0.9,
-              lineJoin: 'round'
-            }).addTo(map);
-            
-            nextSegmentRef.current = polyline;
-          }
-        }
-        
-        // Set loading to false after both routes are drawn
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error fetching next segment route:', error);
-        setIsLoading(false);
-      }
-    };
-    
-    // Set loading to true at the start
-    setIsLoading(true);
-    
-    // Chain the promises to ensure they run in sequence
-    fetchAndDrawFullRoute()
-      .then(() => fetchAndDrawNextSegment())
-      .catch(() => setIsLoading(false));
-    
-    // Clean up function
-    return () => {
-      if (routeRef.current && map) {
-        map.removeLayer(routeRef.current);
-      }
-      if (nextSegmentRef.current && map) {
-        map.removeLayer(nextSegmentRef.current);
-      }
-    };
-  }, [map, stops, lastClearedStopIndex, nextStopIndex, currentPosition]);
-  
-  // Return loading overlay if routes are being fetched
-  return isLoading ? (
-    <div className="osrm-loading-overlay">
-      <div className="osrm-loading-content">
-        <div className="osrm-spinner"></div>
-        <p>Updating route...</p>
-      </div>
-    </div>
-  ) : null;
-};
-
 // Component to keep bus in view
-const KeepBusInView = ({ position }) => {
+const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
   const map = useMap();
   const [lastPosition, setLastPosition] = useState(null);
+  const initialSetupRef = useRef(true);
+  
+  // Add map event handler for zoom changes
+  useMapEvents({
+    zoomend: () => {
+      // Only mark as user zoomed if not initial setup
+      if (!initialSetupRef.current) {
+        setUserZoomed(true);
+      }
+    },
+    dragend: () => {
+      setUserZoomed(true);
+    }
+  });
   
   useEffect(() => {
     if (!position || !map) return;
+    
+    // Set maximum zoom on initial position
+    if (initialSetupRef.current) {
+      map.setView(position, 19); // Maximum zoom on first position
+      initialSetupRef.current = false;
+      return;
+    }
     
     // Check if position has changed significantly
     if (lastPosition && 
@@ -276,247 +363,21 @@ const KeepBusInView = ({ position }) => {
     
     setLastPosition(position);
     
-    // Check if the bus is within the current map bounds
-    const bounds = map.getBounds();
-    const isInBounds = bounds.contains(position);
-    
-    // If the bus is outside the visible area, recenter the map
-    if (!isInBounds) {
-      //console.log('Bus moved outside visible area, recentering map');
-      map.setView(position, map.getZoom());
-    }
-  }, [map, position, lastPosition]);
-  
-  return null;
-};
-
-// Component for tracking driver location with geolocation API
-const DriverLocationTracker = ({ setPosition }) => {
-  const map = useMapEvents({
-    locationfound(e) {
-      setPosition([e.latlng.lat, e.latlng.lng]);
-    },
-    locationerror(e) {
-      console.error('Location error:', e.message);
-      alert('Could not get your location. Please enable location services.');
-    }
-  });
-  
-  useEffect(() => {
-    // Start tracking location when component mounts
-    map.locate({ watch: true, enableHighAccuracy: true });
-    
-    return () => {
-      map.stopLocate();
-    };
-  }, [map]);
-  
-  return null;
-};
-
-// Button to center map on driver's location
-const LocationButton = ({ position, setCenter, busInfo }) => {
-  // Remove mapZoom and setMapZoom that are causing unused variable warnings
-  const map = useRef(null); // Use a ref instead of useMap() hook
-
-  const handleClick = () => {
-    if (position) {
-      // If we have the driver's position, center on that with maximum zoom
-      setCenter(position);
-      // We'll now handle the zoom in the MapController component
-      //console.log('Centering map on driver position with maximum zoom:', position);
-    } else if (busInfo && busInfo.nextStop) {
-      // Fall back to the next bus stop if driver position isn't available
-      const nextStopPosition = [
-        parseFloat(busInfo.nextStop.latitude),
-        parseFloat(busInfo.nextStop.longitude)
-      ];
-      setCenter(nextStopPosition);
-      //console.log('Centering map on next stop:', nextStopPosition);
-    } else if (busInfo && busInfo.route && busInfo.route.length > 0) {
-      // Fall back to the first stop in the route
-      const firstStopPosition = [
-        parseFloat(busInfo.route[0].latitude),
-        parseFloat(busInfo.route[0].longitude)
-      ];
-      setCenter(firstStopPosition);
-      //console.log('Centering map on first stop in route:', firstStopPosition);
+    // If user hasn't manually zoomed, follow the bus with max zoom
+    if (!userZoomed) {
+      map.setView(position, 19); // Use max zoom level (19)
     } else {
-      // Default to IIT KGP location
-      const defaultPosition = [22.3190, 87.3091];
-      setCenter(defaultPosition);
-      //console.log('Centering map on default location:', defaultPosition);
-    }
-  };
-  
-  // Always make the button clickable
-  return (
-    <button 
-      className="location-button" 
-      onClick={handleClick} 
-      title={position ? "Center map on your location" : "Center map on route"}
-    >
-      <i className="fas fa-location-arrow"></i> {position ? "Your Location" : "Center Map"}
-    </button>
-  );
-};
-
-// Rename these components to indicate they're unused or add eslint-disable comments
-// eslint-disable-next-line no-unused-vars
-const UnusedClearStopButton = ({ busId, stopId, onStopCleared, isNextStop }) => {
-  const [loading, setLoading] = useState(false);
-  
-  const handleClearStop = async () => {
-    if (!busId || !stopId) return;
-    
-    try {
-      setLoading(true);
-      const response = await axios.post(
-        getApiUrl('/driver/clear-stop'),
-        { busId, stopId },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('jwtToken')}`
-          }
-        }
-      );
+      // If user has zoomed but bus is outside view, recenter but maintain zoom
+      const bounds = map.getBounds();
+      const isInBounds = bounds.contains(position);
       
-      if (response.data) {
-        //console.log('Stop cleared successfully');
-        if (onStopCleared) onStopCleared(response.data.data);
+      if (!isInBounds) {
+        map.setView(position, map.getZoom());
       }
-    } catch (error) {
-      console.error('Error clearing stop:', error);
-      alert('Failed to mark stop as cleared. Please try again.');
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [map, position, lastPosition, userZoomed]);
   
-  if (!isNextStop) return null;
-  
-  return (
-    <button 
-      className="clear-stop-button" 
-      onClick={handleClearStop} 
-      disabled={loading}
-    >
-      {loading ? 'Marking...' : 'Mark as Cleared'}
-    </button>
-  );
-};
-
-// eslint-disable-next-line no-unused-vars
-const UnusedTurnNotification = ({ stops, currentPosition, lastClearedStopIndex, nextStopIndex }) => {
-  const [showNotification, setShowNotification] = useState(false);
-  const [turnDirection, setTurnDirection] = useState(null);
-  const [distance, setDistance] = useState(null);
-  const notificationRef = useRef(null);
-  
-  useEffect(() => {
-    if (!stops || !currentPosition || lastClearedStopIndex === null || nextStopIndex === null) return;
-    
-    const lastStop = stops[lastClearedStopIndex];
-    const nextStop = stops[nextStopIndex];
-    
-    // Calculate upcoming turns by comparing bearings
-    const calculateTurn = () => {
-      const currentPos = L.latLng(currentPosition);
-      const lastStopPos = L.latLng(
-        parseFloat(lastStop.latitude),
-        parseFloat(lastStop.longitude)
-      );
-      const nextStopPos = L.latLng(
-        parseFloat(nextStop.latitude),
-        parseFloat(nextStop.longitude)
-      );
-      
-      // Calculate bearings
-      const bearingToNext = calculateBearing(currentPos, nextStopPos);
-      
-      // Calculate distance to next stop
-      const distanceToNext = currentPos.distanceTo(nextStopPos);
-      setDistance(distanceToNext);
-      
-      // Determine if there's a turn coming up (within 100m)
-      if (distanceToNext <= 100) {
-        // Calculate current heading based on last few positions
-        // This is simplified - ideally, you'd track recent positions to determine heading
-        const currentHeading = calculateBearing(lastStopPos, currentPos);
-        
-        // Calculate angle between current heading and bearing to next stop
-        const angle = Math.abs(bearingToNext - currentHeading);
-        const normalizedAngle = angle > 180 ? 360 - angle : angle;
-        
-        // Determine turn direction based on angle
-        if (normalizedAngle > 30 && normalizedAngle < 150) {
-          if ((bearingToNext > currentHeading && bearingToNext - currentHeading < 180) || 
-              (currentHeading > bearingToNext && currentHeading - bearingToNext > 180)) {
-            setTurnDirection('right');
-          } else {
-            setTurnDirection('left');
-          }
-          
-          // Show notification 5 seconds before turn (assume average speed of 5m/s)
-          if (distanceToNext <= 25) {
-            setShowNotification(true);
-            
-            // Hide notification 5 seconds after passing the turn
-            const hideTimeout = setTimeout(() => {
-              setShowNotification(false);
-            }, 10000); // 5 seconds before + 5 seconds after = 10 seconds total
-            
-            return () => clearTimeout(hideTimeout);
-          }
-        } else {
-          setTurnDirection('straight');
-        }
-      } else {
-        setTurnDirection(null);
-        setShowNotification(false);
-      }
-    };
-    
-    // Calculate turn every 1 second
-    const interval = setInterval(calculateTurn, 1000);
-    
-    return () => clearInterval(interval);
-  }, [stops, currentPosition, lastClearedStopIndex, nextStopIndex]);
-  
-  // Helper function to calculate bearing between two points
-  const calculateBearing = (start, end) => {
-    const startLat = start.lat * Math.PI / 180;
-    const startLng = start.lng * Math.PI / 180;
-    const endLat = end.lat * Math.PI / 180;
-    const endLng = end.lng * Math.PI / 180;
-    
-    const y = Math.sin(endLng - startLng) * Math.cos(endLat);
-    const x = Math.cos(startLat) * Math.sin(endLat) -
-              Math.sin(startLat) * Math.cos(endLat) * Math.cos(endLng - startLng);
-    
-    let bearing = Math.atan2(y, x) * 180 / Math.PI;
-    if (bearing < 0) bearing += 360;
-    
-    return bearing;
-  };
-  
-  if (!showNotification) return null;
-  
-  // Render turn notification
-  return (
-    <div className="turn-notification" ref={notificationRef}>
-      <div className="turn-icon">
-        {turnDirection === 'left' && <i className="fas fa-arrow-left"></i>}
-        {turnDirection === 'right' && <i className="fas fa-arrow-right"></i>}
-        {turnDirection === 'straight' && <i className="fas fa-arrow-up"></i>}
-      </div>
-      <div className="turn-text">
-        {turnDirection === 'left' && <p>Turn left in {Math.round(distance)} meters</p>}
-        {turnDirection === 'right' && <p>Turn right in {Math.round(distance)} meters</p>}
-        {turnDirection === 'straight' && <p>Continue straight for {Math.round(distance)} meters</p>}
-      </div>
-    </div>
-  );
+  return null;
 };
 
 // Component to update next stop distance in the UI
@@ -558,7 +419,7 @@ const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nex
   useEffect(() => {
     if (!stops || !currentPosition || lastClearedStopIndex === null || nextStopIndex === null) return;
     
-    // Use nextStop directly and remove reference to lastStop that isn't used
+    // Use nextStop directly
     const nextStop = stops[nextStopIndex];
     
     // Calculate heading and distance continuously
@@ -573,8 +434,7 @@ const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nex
       const distanceToNext = currentPos.distanceTo(nextStopPos);
       setDistance(Math.round(distanceToNext));
       
-      // Get route from current position to next stop using Leaflet routing
-      // (This is a simplification - in a real app we'd use the OSRM route data)
+      // Get route from current position to next stop
       const bearing = calculateBearing(currentPos, nextStopPos);
       
       // Determine direction based on bearing
@@ -645,22 +505,20 @@ const PermanentDirections = ({ stops, currentPosition, lastClearedStopIndex, nex
 function DriverMapScreen() {
   const [position, setPosition] = useState(null);
   const [center, setCenter] = useState(null);
-  const [zoom, setZoom] = useState(15); // Add zoom state
+  const [zoom, setZoom] = useState(19); // Start with maximum zoom level (19)
   const [busInfo, setBusInfo] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [userZoomed, setUserZoomed] = useState(false); // Track if user manually zoomed
   const navigate = useNavigate();
-  
-  // For the map
+
   const mapRef = useRef(null);
-  
-  // Set up axios interceptor for JWT expiration
+
   useEffect(() => {
     const interceptor = axios.interceptors.response.use(
       response => response,
       error => {
         if (error.response && (error.response.status === 401 || error.response.data?.expired)) {
-          //console.log('Authentication token expired or invalid. Redirecting to login.');
           localStorage.removeItem('jwtToken');
           localStorage.removeItem('user');
           navigate('/login');
@@ -668,18 +526,17 @@ function DriverMapScreen() {
         return Promise.reject(error);
       }
     );
-    
+
     return () => {
       axios.interceptors.response.eject(interceptor);
     };
   }, [navigate]);
-  
-  // Fetch driver's bus info and route
+
   useEffect(() => {
     const fetchDriverBus = async () => {
       try {
         setLoading(true);
-        
+
         const response = await axios.get(
           getApiUrl('/driver/my-bus'),
           {
@@ -688,10 +545,9 @@ function DriverMapScreen() {
             }
           }
         );
-        
+
         if (response.data && response.data.data) {
           setBusInfo(response.data.data);
-          //console.log('Driver bus info loaded:', response.data.data);
         } else {
           setError('No bus assigned to you');
         }
@@ -702,23 +558,20 @@ function DriverMapScreen() {
         setLoading(false);
       }
     };
-    
+
     fetchDriverBus();
-    
-    // Refresh bus info every 60 seconds
+
     const interval = setInterval(fetchDriverBus, 60000);
-    
+
     return () => clearInterval(interval);
-  }, []);  
-  
-  // Center map when position is first determined
+  }, []);
+
   useEffect(() => {
     if (position && !center) {
       setCenter(position);
     }
   }, [position, center]);
-  
-  // Handle stop reached automatically (replaces manual clearing)
+
   const handleStopReached = async (busId, stopId) => {
     try {
       const response = await axios.post(
@@ -730,18 +583,14 @@ function DriverMapScreen() {
           }
         }
       );
-      
+
       if (response.data) {
-        //console.log('Stop cleared automatically');
-        
-        // Update the local state with the new stops_cleared value
         setBusInfo(prev => ({
           ...prev,
           bus: response.data.data,
           stopsCleared: parseInt(response.data.data.stops_cleared)
         }));
-        
-        // Refresh the bus info to get updated last/next stop
+
         const fetchDriverBus = async () => {
           try {
             const response = await axios.get(
@@ -752,7 +601,7 @@ function DriverMapScreen() {
                 }
               }
             );
-            
+
             if (response.data && response.data.data) {
               setBusInfo(response.data.data);
             }
@@ -760,44 +609,39 @@ function DriverMapScreen() {
             console.error('Error refreshing driver bus info:', error);
           }
         };
-        
+
         fetchDriverBus();
       }
     } catch (error) {
       console.error('Error auto-clearing stop:', error);
     }
   };
-  
-  // Find indices for last cleared stop and next stop
+
   const getStopIndices = () => {
     if (!busInfo || !busInfo.route || busInfo.route.length === 0) {
       return { lastClearedStopIndex: null, nextStopIndex: null };
     }
-    
+
     const stops = busInfo.route;
     const stopsCleared = busInfo.stopsCleared || 0;
-    
-    // If stopsCleared is 0, the last cleared stop is the last one in the route (circular)
-    // and the next stop is the first in the route
+
     if (stopsCleared === 0) {
       return {
         lastClearedStopIndex: stops.length - 1,
         nextStopIndex: 0
       };
     }
-    
-    // Normalize stopsCleared to be within the route length (for circular routes)
+
     const normalizedStopsCleared = stopsCleared % stops.length;
-    
+
     return {
       lastClearedStopIndex: normalizedStopsCleared - 1,
       nextStopIndex: normalizedStopsCleared % stops.length
     };
   };
-  
-  const { lastClearedStopIndex, nextStopIndex } = getStopIndices();  
-  
-  // If still loading, show a spinner
+
+  const { lastClearedStopIndex, nextStopIndex } = getStopIndices();
+
   if (loading) {
     return (
       <div className="driver-map-loading">
@@ -806,8 +650,7 @@ function DriverMapScreen() {
       </div>
     );
   }
-  
-  // If there's an error, show error message
+
   if (error) {
     return (
       <div className="driver-map-error driver-map-container">
@@ -817,8 +660,7 @@ function DriverMapScreen() {
       </div>
     );
   }
-  
-  // If no bus assigned, show message
+
   if (!busInfo || !busInfo.bus) {
     return (
       <div className="driver-map-error driver-map-container">
@@ -827,19 +669,19 @@ function DriverMapScreen() {
       </div>
     );
   }
-  
-  // Function to set both center and zoom at the same time
+
   const handleCenterMap = (newCenter) => {
     setCenter(newCenter);
-    setZoom(19); // Set maximum zoom when centering
+    setZoom(19); // Use maximum zoom level
+    setUserZoomed(false); // Reset user zoom preference when manually centering
   };
-  
+
   return (
     <div className="driver-map-screen">
       <div className="driver-map-container">
         <MapContainer
-          center={center || [22.3190, 87.3091]} // Default to IIT KGP if no position yet
-          zoom={zoom} // Use zoom state instead of hard-coded value
+          center={center || [22.3190, 87.3091]}
+          zoom={zoom}
           className="driver-map"
           ref={mapRef}
         >
@@ -847,19 +689,19 @@ function DriverMapScreen() {
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          
-          {/* Map controller to center map */}
+
           <MapController center={center} zoom={zoom} />
-          
-          {/* Driver location tracker */}
+
           <DriverLocationTracker setPosition={setPosition} />
-          
-          {/* Keep bus in view component */}
+
           {position && (
-            <KeepBusInView position={position} />
+            <KeepBusInView 
+              position={position} 
+              userZoomed={userZoomed} 
+              setUserZoomed={setUserZoomed}
+            />
           )}
-          
-          {/* Location updater component */}
+
           {position && busInfo && (
             <LocationUpdater
               driverId={localStorage.getItem('userId')}
@@ -867,18 +709,17 @@ function DriverMapScreen() {
               position={position}
             />
           )}
-          
-          {/* Proximity detector for auto-clearing stops */}
+
           {position && busInfo && busInfo.nextStop && (
             <ProximityDetector
               busId={busInfo.bus.id}
               position={position}
               nextStop={busInfo.nextStop}
+              busInfo={busInfo}
               onStopReached={handleStopReached}
             />
           )}
-          
-          {/* Driver marker */}
+
           {position && (
             <Marker position={position} icon={busIcon}>
               <Popup>
@@ -889,8 +730,7 @@ function DriverMapScreen() {
               </Popup>
             </Marker>
           )}
-          
-          {/* Show all stops in the route */}
+
           {busInfo && busInfo.route && busInfo.route.map((stop, index) => (
             <Marker
               key={stop.id}
@@ -908,8 +748,7 @@ function DriverMapScreen() {
               </Popup>
             </Marker>
           ))}
-          
-          {/* OSRM routes */}
+
           {busInfo && busInfo.route && position && (
             <OsrmRoutes
               stops={busInfo.route}
@@ -918,16 +757,14 @@ function DriverMapScreen() {
               nextStopIndex={nextStopIndex}
             />
           )}
-          
-          {/* Distance updater for next stop */}
+
           {position && busInfo && busInfo.nextStop && (
             <NextStopDistanceUpdater
               position={position}
               nextStop={busInfo.nextStop}
             />
           )}
-          
-          {/* Location button outside map - moved inside MapContainer to fix the context error */}
+
           <div className="location-button-container">
             <button 
               className="location-button" 
@@ -943,8 +780,7 @@ function DriverMapScreen() {
             </button>
           </div>
         </MapContainer>
-        
-        {/* Permanent directions panel */}
+
         {busInfo && busInfo.route && position && (
           <PermanentDirections
             stops={busInfo.route}
@@ -953,8 +789,7 @@ function DriverMapScreen() {
             nextStopIndex={nextStopIndex}
           />
         )}
-        
-        {/* Bus info panel */}
+
         <div className="bus-info-panel">
           <h3>Bus: {busInfo.bus.name}</h3>
           {busInfo.nextStop && (
