@@ -663,16 +663,14 @@ function DriverMapScreen() {
 
     if (stopsCleared === 0) {
       return {
-        lastClearedStopIndex: stops.length - 1,
+        lastClearedStopIndex: null,
         nextStopIndex: 0
       };
     }
 
-    const normalizedStopsCleared = stopsCleared % stops.length;
-
     return {
-      lastClearedStopIndex: normalizedStopsCleared - 1,
-      nextStopIndex: normalizedStopsCleared % stops.length
+      lastClearedStopIndex: stopsCleared - 1,
+      nextStopIndex: stopsCleared % stops.length
     };
   };
 
@@ -775,17 +773,17 @@ function DriverMapScreen() {
             </Marker>
           )}
 
-          {busInfo && busInfo.route && busInfo.route.map((stop, index) => (
+          {busInfo && busInfo.route && busInfo.route.map((stop, idx) => (
             <Marker
               key={stop.id}
               position={[parseFloat(stop.latitude), parseFloat(stop.longitude)]}
-              icon={index === nextStopIndex ? nextStopIcon : busStopIcon}
+              icon={idx === nextStopIndex ? nextStopIcon : busStopIcon}
             >
               <Popup>
                 <div className="stop-popup">
                   <strong>{stop.name}</strong>
-                  <p>Stop #{index + 1} in route</p>
-                  {index === nextStopIndex && (
+                  <p>Stop #{idx + 1} in route</p>
+                  {idx === nextStopIndex && (
                     <p className="next-stop-label">This is your next stop</p>
                   )}
                 </div>

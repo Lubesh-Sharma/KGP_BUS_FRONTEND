@@ -695,24 +695,35 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
           routeDataRef.current = routeData;
 
           // Process stop data with new ETA information
-          const stops = routeData.stops.map((stop) => {
+          const stops = routeData.stops.map((stop, index) => {
             let status = 'remaining'; // Default status (blue)
-
-            // If we have current stop info, mark stops as cleared or next
-            if (routeData.currentStop) {
-              if (stop.stop_order <= routeData.currentStop.stop_order) {
-                status = 'cleared'; // Green
-              } else if (stop.stop_order === routeData.currentStop.stop_order + 1) {
-                status = 'next'; // Red (next stop)
-              }
+            
+            // Get the stops_cleared value from bus data
+            const stopsCleared = parseInt(routeData.bus?.stops_cleared || 0);
+            
+            // Determine status based solely on index vs stopsCleared
+            if (index < stopsCleared) {
+              status = 'cleared'; // Green (passed)
+            } else if (index === stopsCleared) {
+              status = 'next'; // Red (next stop)
             }
 
-            // Use the ETA data from backend
+            // Set estimated time text based on status
             let estimatedTime = '';
-            if (stop.eta_time) {
-              if (stop.eta_time === "Passed") {
-                estimatedTime = "Passed";
-              } else if (stop.eta_minutes > 0) {
+            
+            if (status === 'cleared' && stop.eta_time) {
+              // For cleared stops, show "Passed" with the time
+              estimatedTime = `Passed (${stop.eta_time})`;
+            } else if (status === 'next' && stop.eta_time) {
+              // For next stop, show "Next" with the time
+              if (stop.eta_minutes > 0) {
+                estimatedTime = `Next (${stop.eta_time}) - ${stop.eta_minutes} min`;
+              } else {
+                estimatedTime = `Next (${stop.eta_time})`;
+              }
+            } else if (stop.eta_time) {
+              // For remaining stops, just show the time
+              if (stop.eta_minutes > 0) {
                 estimatedTime = `${stop.eta_time} (${stop.eta_minutes} min)`;
               } else {
                 estimatedTime = stop.eta_time;
