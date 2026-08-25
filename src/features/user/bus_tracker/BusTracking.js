@@ -1070,7 +1070,13 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
           <MapEventListener setAutoFollow={setAutoFollow} />
-          <LocationButton setUserLocation={setUserLocation} />
+          <LocationButton 
+            setUserLocation={setUserLocation} 
+            autoFollow={autoFollow}
+            setAutoFollow={setAutoFollow}
+            userLocation={userLocation}
+            busLocation={busLocation}
+          />
           {userLocation && (
             <Marker
               position={userLocation}
@@ -1162,14 +1168,16 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
           )}
         </MapContainer>
 
-        {(selectedBusState && busLocation && busStops.length > 0) && (
+        {selectedBusState && (
           <div className="map-legend">
             <button
               className={`recenter-bus-btn ${autoFollow ? 'active' : ''}`}
               onClick={() => {
                 setAutoFollow(true);
-                if (mapInstance.current && busLocation) {
-                  mapInstance.current.flyTo(busLocation, 16, { animate: true, duration: 1.0 });
+                const map = mapInstance.current;
+                const target = busLocation || userLocation;
+                if (map && target) {
+                  map.flyTo(target, 16, { animate: true, duration: 1.0 });
                 }
               }}
               style={{
@@ -1178,14 +1186,16 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
                 borderRadius: '20px',
                 border: 'none',
                 backgroundColor: autoFollow ? '#2e7d32' : '#0288d1',
-                color: '#fff',
-                fontWeight: 'bold',
+                color: 'white',
                 cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                display: 'block'
+                fontSize: '12px',
+                display: 'block',
+                width: '100%',
+                fontWeight: 'bold',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
               }}
             >
-              🎯 {autoFollow ? 'Following Bus Live' : 'Recenter on Bus'}
+              🎯 {autoFollow ? 'Auto-Following' : 'Recenter Bus'}
             </button>
             <div className="legend-item">
               <div className="legend-icon" style={{ backgroundColor: '#90CAF9' }}></div>

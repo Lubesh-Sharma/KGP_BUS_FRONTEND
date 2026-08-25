@@ -867,7 +867,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                     
                     {routeStartLocation && selectedStop && (
                         <RoutingControl
-                            key={`route-${selectedStop.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`}
+                            key={`route-${selectedStop.id}`}
                             startPoint={routeStartLocation}
                             endPoint={[selectedStop.latitude, selectedStop.longitude]}
                             color="#ff6b6b"
