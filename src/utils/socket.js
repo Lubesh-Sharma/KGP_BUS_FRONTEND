@@ -18,7 +18,7 @@ export const getSocket = () => {
         });
 
         socket.on('connect', () => {
-            console.log('✅ Connected to WebSockets server:', socket.id);
+            // Connected to WebSockets server
         });
 
         socket.on('disconnect', (reason) => {

@@ -2,16 +2,14 @@ import axios from 'axios';
 
 axios.defaults.withCredentials = true;
 
-// Dynamically resolve backend Base URL for Local Host and Wi-Fi Network IPs (e.g. 10.109.22.61)
 const resolveBackendUrl = () => {
   const envUrl = process.env.REACT_APP_BACKEND_URL || process.env.REACT_APP_API_URL;
-  if (envUrl && !envUrl.includes('localhost')) {
-    return envUrl;
+  let url = envUrl;
+  if (!url && typeof window !== 'undefined' && window.location && window.location.hostname) {
+    url = `${window.location.protocol}//${window.location.hostname}:5000`;
   }
-  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
-    return `${window.location.protocol}//${window.location.hostname}:5000`;
-  }
-  return envUrl || 'http://localhost:5000';
+  url = url || 'http://localhost:5000';
+  return url.replace(/\/+$/, '');
 };
 
 const API_BASE_URL = resolveBackendUrl();
@@ -83,7 +81,9 @@ const apiConfig = {
 
 // Helper function to build full API URLs
 export const getApiUrl = (path) => {
-  return `${API_BASE_URL}${path}`;
+  const baseUrl = API_BASE_URL.replace(/\/+$/, '');
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  return `${baseUrl}${cleanPath}`;
 };
 
 // New helper to handle API calls with better error handling
