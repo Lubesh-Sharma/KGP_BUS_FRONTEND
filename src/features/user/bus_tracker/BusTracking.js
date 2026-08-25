@@ -243,16 +243,20 @@ const MapEventListener = ({ setAutoFollow }) => {
 };
 
 // Custom location control component - high-accuracy map-based user location tracker
-const LocationButton = ({ setUserLocation }) => {
+const LocationButton = ({ setUserLocation, autoFollow, setAutoFollow, userLocation, busLocation }) => {
   const map = useMap();
 
   const handleLocationRequest = () => {
-    map.locate({ setView: true, maxZoom: 18, enableHighAccuracy: true });
+    setAutoFollow(true);
+    const target = userLocation || busLocation;
+    if (target) {
+      map.flyTo(target, 17, { animate: true, duration: 0.8 });
+    }
   };
 
   useEffect(() => {
-    // Start continuous watching using Leaflet's high-accuracy locator
-    map.locate({ watch: true, enableHighAccuracy: true, maxZoom: 18 });
+    // Start continuous watching WITHOUT altering map camera automatically
+    map.locate({ watch: true, setView: false, enableHighAccuracy: true });
 
     const handleFound = (e) => {
       if (e.latlng) {
@@ -276,7 +280,7 @@ const LocationButton = ({ setUserLocation }) => {
 
   return (
     <div className="location-control">
-      <button onClick={handleLocationRequest} title="Show my location">
+      <button onClick={handleLocationRequest} title="Center on location">
         <i className="fas fa-location-arrow"></i>
       </button>
     </div>

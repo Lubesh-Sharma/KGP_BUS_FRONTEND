@@ -268,7 +268,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     const [busStops, setBusStops] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [mapCenter, setMapCenter] = useState(userLocation || [22.3190, 87.3091]); // Default to user location if available
+    const [mapCenter, setMapCenter] = useState(userLocation || [22.3190, 87.3091]);
     const [zoom, setZoom] = useState(15);
     const [autoFollow, setAutoFollow] = useState(true);
     const [coordinates, setCoordinates] = useState({
@@ -276,11 +276,12 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
         longitude: ''
     });
     const [searchMarker, setSearchMarker] = useState(userLocation || [22.3190, 87.3091]);
+    const initialMarkerSetRef = useRef(false);
     const [searchResults, setSearchResults] = useState([]);
     const [hasSearched, setHasSearched] = useState(false);
     const [isPathLoading, setIsPathLoading] = useState(false);
     const [selectedStop, setSelectedStop] = useState(null);
-    const [routeStartLocation, setRouteStartLocation] = useState(null); // Store the user location used for routing
+    const [routeStartLocation, setRouteStartLocation] = useState(null);
     
     const [locationQuery, setLocationQuery] = useState('');
     const [locationSearching, setLocationSearching] = useState(false);
@@ -368,13 +369,15 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
 
     useEffect(() => {
         if (userLocation) {
-            setCoordinates({
-                latitude: userLocation[0].toFixed(6),
-                longitude: userLocation[1].toFixed(6)
-            });
-            setMapCenter(userLocation);
-            setSearchMarker(userLocation);
-            // Do NOT update routeStartLocation here
+            if (!initialMarkerSetRef.current) {
+                setCoordinates({
+                    latitude: userLocation[0].toFixed(6),
+                    longitude: userLocation[1].toFixed(6)
+                });
+                setMapCenter(userLocation);
+                setSearchMarker(userLocation);
+                initialMarkerSetRef.current = true;
+            }
         }
     }, [userLocation]);
 
@@ -904,6 +907,9 @@ const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSe
                 longitude: lng.toFixed(6)
             });
             setSearchMarker([lat, lng]);
+            if (typeof setAutoFollow === 'function') {
+                setAutoFollow(false);
+            }
         },
         dragstart: () => {
             if (typeof setAutoFollow === 'function') {

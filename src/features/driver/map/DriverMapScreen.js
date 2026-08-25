@@ -376,10 +376,8 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
 
   // Add map event handler for zoom changes
   useMapEvents({
-    zoomend: () => {
-      if (!initialSetupRef.current) {
-        setUserZoomed(true);
-      }
+    zoomstart: () => {
+      setUserZoomed(true);
     },
     dragstart: () => {
       setUserZoomed(true);
