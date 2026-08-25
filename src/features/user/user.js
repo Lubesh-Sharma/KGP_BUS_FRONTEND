@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './user.css';
 import BusTracking from './bus_tracker/BusTracking';
-import BusStopsView from './bus_search/BusStopSearch';
+import BusStopsView from './bus_search/BusStopsView';
 import BusStopSearch from './bus_search/BusStopSearch';
 import api from '../../utils/api';
 

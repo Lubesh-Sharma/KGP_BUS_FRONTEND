@@ -237,29 +237,29 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, s
   return null;
 };
 
-// Component to update map center when user location changes
-const MapController = ({ center, zoom }) => {
+// Component to update map center smoothly when autoFollow is active
+const MapController = ({ center, zoom, autoFollow }) => {
     const map = useMap();
     
     useEffect(() => {
-        if (center) {
-            map.setView(center, zoom || map.getZoom());
+        if (center && autoFollow) {
+            map.panTo(center, { animate: true, duration: 0.8 });
         }
-    }, [map, center, zoom]);
+    }, [map, center, autoFollow]);
     
     return null;
 };
 
 // Button to center on user's location
-const LocationButton = ({ userLocation, onClick }) => {
+const LocationButton = ({ userLocation, onClick, autoFollow }) => {
     return (
         <button 
-            className="location-button" 
+            className={`location-button ${autoFollow ? 'active' : ''}`} 
             onClick={onClick}
             disabled={!userLocation}
             title="Center map on your location"
         >
-            <i className="fas fa-location-arrow"></i> Your Current Location
+            <i className="fas fa-location-arrow"></i> {autoFollow ? 'Following Location' : 'Recenter Location'}
         </button>
     );
 };
@@ -270,6 +270,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     const [error, setError] = useState(null);
     const [mapCenter, setMapCenter] = useState(userLocation || [22.3190, 87.3091]); // Default to user location if available
     const [zoom, setZoom] = useState(15);
+    const [autoFollow, setAutoFollow] = useState(true);
     const [coordinates, setCoordinates] = useState({
         latitude: '',
         longitude: ''
@@ -453,13 +454,19 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     
     const handleCenterOnUser = () => {
         if (userLocation) {
+            setAutoFollow(true);
             setMapCenter(userLocation);
-            setZoom(19);
+            setZoom(17);
 
             setCoordinates({
                 latitude: userLocation[0].toFixed(6),
                 longitude: userLocation[1].toFixed(6)
             });
+
+            const map = mapRef.current?._leaflet_map;
+            if (map) {
+                map.flyTo(userLocation, 17, { animate: true, duration: 1.0 });
+            }
         }
     };
     
@@ -522,17 +529,23 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     
     const handleStopSelect = (stop) => {
         try {
-            ////console.log("Stop selected:", stop);
-            
-            // First, explicitly call clearExistingRoutes to remove any existing routes
             clearExistingRoutes();
             setIsPathLoading(true);
             setTimeout(() => {
                 setSelectedStop(stop);
-                setRouteStartLocation(searchMarker ? [...searchMarker] : null); // Use red pin for routing
+                const startLoc = searchMarker ? [...searchMarker] : userLocation;
+                setRouteStartLocation(startLoc);
                 const marker = markerRefs.current[stop.id];
                 if (marker) {
                     marker.openPopup();
+                }
+
+                // Fit bounds between start location and bus stop so both are visible
+                const map = mapRef.current?._leaflet_map;
+                if (map && startLoc) {
+                    setAutoFollow(false);
+                    const bounds = L.latLngBounds([startLoc, [stop.latitude, stop.longitude]]);
+                    map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16 });
                 }
             }, 500);
         } catch (err) {
@@ -793,8 +806,14 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                     />
                     
-                    <MapController center={mapCenter} zoom={zoom} />
-                    <MapEvents setCoordinates={setCoordinates} setSearchMarker={setSearchMarker} clearExistingRoutes={clearExistingRoutes} setSelectedStop={setSelectedStop} />
+                    <MapController center={mapCenter} zoom={zoom} autoFollow={autoFollow} />
+                    <MapEvents 
+                        setCoordinates={setCoordinates} 
+                        setSearchMarker={setSearchMarker} 
+                        clearExistingRoutes={clearExistingRoutes} 
+                        setSelectedStop={setSelectedStop} 
+                        setAutoFollow={setAutoFollow}
+                    />
                     
                     {userLocation && (
                         <Marker position={userLocation} icon={userIcon}>
@@ -858,6 +877,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
                         <LocationButton
                             userLocation={userLocation}
                             onClick={handleCenterOnUser}
+                            autoFollow={autoFollow}
                         />
                     </div>
                 </MapContainer>
@@ -866,7 +886,7 @@ const BusStopSearch = ({ userLocation, setUserLocation }) => {
     );
 };
 
-const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSelectedStop }) => {
+const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSelectedStop, setAutoFollow }) => {
     useMapEvents({
         click: (e) => {
             const { lat, lng } = e.latlng;
@@ -884,6 +904,16 @@ const MapEvents = ({ setCoordinates, setSearchMarker, clearExistingRoutes, setSe
                 longitude: lng.toFixed(6)
             });
             setSearchMarker([lat, lng]);
+        },
+        dragstart: () => {
+            if (typeof setAutoFollow === 'function') {
+                setAutoFollow(false);
+            }
+        },
+        zoomstart: () => {
+            if (typeof setAutoFollow === 'function') {
+                setAutoFollow(false);
+            }
         }
     });
     

@@ -377,12 +377,11 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
   // Add map event handler for zoom changes
   useMapEvents({
     zoomend: () => {
-      // Only mark as user zoomed if not initial setup
       if (!initialSetupRef.current) {
         setUserZoomed(true);
       }
     },
-    dragend: () => {
+    dragstart: () => {
       setUserZoomed(true);
     }
   });
@@ -392,31 +391,22 @@ const KeepBusInView = ({ position, userZoomed, setUserZoomed }) => {
 
     // Set maximum zoom on initial position
     if (initialSetupRef.current) {
-      map.setView(position, 19); // Maximum zoom on first position
+      map.setView(position, 17);
       initialSetupRef.current = false;
       return;
     }
 
-    // Check if position has changed significantly
     if (lastPosition &&
       position[0] === lastPosition[0] &&
       position[1] === lastPosition[1]) {
-      return; // Position hasn't changed, do nothing
+      return;
     }
 
     setLastPosition(position);
 
-    // If user hasn't manually zoomed, follow the bus with max zoom
+    // Smoothly pan camera to driver's location if auto-follow is active
     if (!userZoomed) {
-      map.setView(position, 19); // Use max zoom level (19)
-    } else {
-      // If user has zoomed but bus is outside view, recenter but maintain zoom
-      const bounds = map.getBounds();
-      const isInBounds = bounds.contains(position);
-
-      if (!isInBounds) {
-        map.setView(position, map.getZoom());
-      }
+      map.panTo(position, { animate: true, duration: 0.8 });
     }
   }, [map, position, lastPosition, userZoomed]);
 
@@ -891,16 +881,16 @@ function DriverMapScreen() {
 
           <div className="location-button-container">
             <button
-              className="location-button"
-              onClick={() => handleCenterMap(position ||
-                (busInfo && busInfo.nextStop ?
-                  [parseFloat(busInfo.nextStop.latitude), parseFloat(busInfo.nextStop.longitude)] :
-                  (busInfo && busInfo.route && busInfo.route.length > 0 ?
-                    [parseFloat(busInfo.route[0].latitude), parseFloat(busInfo.route[0].longitude)] :
-                    [22.3190, 87.3091])))}
-              title={position ? "Center map on your location" : "Center map on route"}
+              className={`location-button ${!userZoomed ? 'active' : ''}`}
+              onClick={() => {
+                setUserZoomed(false);
+                if (position) {
+                  handleCenterMap(position);
+                }
+              }}
+              title="Center map on your live location"
             >
-              <i className="fas fa-location-arrow"></i> {position ? "Your Location" : "Center Map"}
+              <i className="fas fa-location-arrow"></i> {!userZoomed ? "Following Live Location" : "Recenter Location"}
             </button>
           </div>
         </MapContainer>

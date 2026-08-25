@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet-routing-machine';
@@ -218,18 +218,27 @@ const RoutingControl = ({ startPoint, endPoint, color = '#3388ff', weight = 4, o
   return null;
 };
 
-// Component to recenter map when needed
-const MapViewController = ({ center, zoom, busLocation }) => {
+// Component to recenter map smoothly when autoFollow is active
+const MapViewController = ({ center, zoom, busLocation, autoFollow }) => {
   const map = useMap();
 
   useEffect(() => {
+    if (!autoFollow) return;
     if (center && zoom) {
-      map.setView(center, zoom);
+      map.panTo(center, { animate: true, duration: 0.8 });
     } else if (busLocation) {
-      map.setView(busLocation, map.getZoom());
+      map.panTo(busLocation, { animate: true, duration: 0.8 });
     }
-  }, [map, center, zoom, busLocation]);
+  }, [map, center, zoom, busLocation, autoFollow]);
 
+  return null;
+};
+
+const MapEventListener = ({ setAutoFollow }) => {
+  useMapEvents({
+    dragstart: () => setAutoFollow(false),
+    zoomstart: () => setAutoFollow(false)
+  });
   return null;
 };
 
@@ -332,6 +341,7 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
   const [busInService, setBusInService] = useState(true);
   const [busRunning, setBusRunning] = useState(false);
   const [routesDrawn, setRoutesDrawn] = useState(false);
+  const [autoFollow, setAutoFollow] = useState(true);
   const [isTripCancelled, setIsTripCancelled] = useState(false);
   const [cancelledReason, setCancelledReason] = useState(null);
 
@@ -1055,6 +1065,7 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
           />
+          <MapEventListener setAutoFollow={setAutoFollow} />
           <LocationButton setUserLocation={setUserLocation} />
           {userLocation && (
             <Marker
@@ -1084,7 +1095,7 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
 
             return (
               <>
-                <MapViewController center={mapCenter} busLocation={displayBusLocation} />
+                <MapViewController center={mapCenter} busLocation={displayBusLocation} autoFollow={autoFollow} />
                 <Marker
                   position={displayBusLocation}
                   icon={busIcon}
@@ -1149,6 +1160,29 @@ const BusTracking = ({ userLocation, setUserLocation, hideDropdown = false, sele
 
         {(selectedBusState && busLocation && busStops.length > 0) && (
           <div className="map-legend">
+            <button
+              className={`recenter-bus-btn ${autoFollow ? 'active' : ''}`}
+              onClick={() => {
+                setAutoFollow(true);
+                if (mapInstance.current && busLocation) {
+                  mapInstance.current.flyTo(busLocation, 16, { animate: true, duration: 1.0 });
+                }
+              }}
+              style={{
+                marginBottom: '10px',
+                padding: '6px 12px',
+                borderRadius: '20px',
+                border: 'none',
+                backgroundColor: autoFollow ? '#2e7d32' : '#0288d1',
+                color: '#fff',
+                fontWeight: 'bold',
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                display: 'block'
+              }}
+            >
+              🎯 {autoFollow ? 'Following Bus Live' : 'Recenter on Bus'}
+            </button>
             <div className="legend-item">
               <div className="legend-icon" style={{ backgroundColor: '#90CAF9' }}></div>
               <span>Bus Route</span>
